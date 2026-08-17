@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -43,5 +44,34 @@ func TestExampleConfigMatchesDefaultTheme(t *testing.T) {
 	}
 	if merged.Error != theme.Default.Error {
 		t.Fatalf("expected untouched Error to stay default, got %q", merged.Error)
+	}
+}
+
+func TestPathHonorsConfigFileEnvVar(t *testing.T) {
+	want := filepath.Join(t.TempDir(), "custom.yml")
+	t.Setenv(ConfigFileEnvVar, want)
+
+	got, err := Path()
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	if got != want {
+		t.Fatalf("Path() = %q, want %q", got, want)
+	}
+}
+
+func TestLoadReadsFileFromEnvVar(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "custom.yml")
+	if err := os.WriteFile(path, []byte("gui:\n  theme:\n    primaryColor: \"#123456\"\n"), 0o644); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+	t.Setenv(ConfigFileEnvVar, path)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Theme().Primary; got != "#123456" {
+		t.Fatalf("Primary = %q, want #123456", got)
 	}
 }

@@ -1,7 +1,8 @@
 // Package config loads cacheriff's user configuration file, following
 // the same convention as lazygit: a small YAML file under the user's
 // config directory, entirely optional, with a "gui.theme" section for
-// overriding colors.
+// overriding colors. Like lazygit's LG_CONFIG_FILE, the location can
+// be overridden with the CCF_CONFIG_FILE environment variable.
 package config
 
 import (
@@ -24,9 +25,17 @@ type GuiConfig struct {
 	Theme theme.Override `yaml:"theme"`
 }
 
-// Path returns the location cacheriff reads its config file from:
-// "<user config dir>/cacheriff/config.yml".
+// ConfigFileEnvVar overrides the config file location; see Path.
+const ConfigFileEnvVar = "CCF_CONFIG_FILE"
+
+// Path returns the location cacheriff reads its config file from. If
+// CCF_CONFIG_FILE is set, that path is used as-is; otherwise it
+// defaults to "<user config dir>/cacheriff/config.yml".
 func Path() (string, error) {
+	if p := os.Getenv(ConfigFileEnvVar); p != "" {
+		return p, nil
+	}
+
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user config dir: %w", err)

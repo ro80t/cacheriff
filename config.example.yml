@@ -5,6 +5,10 @@
 #   macOS:   ~/Library/Application Support/cacheriff/config.yml
 #   Windows: %AppData%\cacheriff\config.yml
 #
+# Or point cacheriff at any file you like, like lazygit's
+# LG_CONFIG_FILE:
+#   CCF_CONFIG_FILE=/path/to/config.yml cacheriff
+#
 # Any color you omit keeps its built-in default. Colors are hex strings.
 
 gui:
