@@ -1,0 +1,25 @@
+# cacheriff config file (like lazygit, this is entirely optional).
+#
+# Copy this to your user config directory as "config.yml":
+#   Linux:   ~/.config/cacheriff/config.yml
+#   macOS:   ~/Library/Application Support/cacheriff/config.yml
+#   Windows: %AppData%\cacheriff\config.yml
+#
+# Any color you omit keeps its built-in default. Colors are hex strings.
+
+gui:
+  theme:
+    # Panel titles, section headers, the sidebar's selected entry.
+    primaryColor: "#FF5FAF"
+    # Border of the currently focused panel.
+    activeBorderColor: "#FF87D7"
+    # Border of an unfocused panel.
+    inactiveBorderColor: "#585858"
+    # Disabled/unavailable items (a package manager that isn't installed).
+    mutedColor: "#585858"
+    # The least prominent text: the help bar, metadata.
+    faintColor: "#808080"
+    # Load errors, failed removals.
+    errorColor: "#FF5F5F"
+    # Completed/positive state.
+    successColor: "#87D787"
