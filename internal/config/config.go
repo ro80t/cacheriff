@@ -25,14 +25,14 @@ type GuiConfig struct {
 	Theme theme.Override `yaml:"theme"`
 }
 
-// ConfigFileEnvVar overrides the config file location; see Path.
-const ConfigFileEnvVar = "CCF_CONFIG_FILE"
+// FileEnvVar overrides the config file location; see Path.
+const FileEnvVar = "CCF_CONFIG_FILE"
 
 // Path returns the location cacheriff reads its config file from. If
 // CCF_CONFIG_FILE is set, that path is used as-is; otherwise it
 // defaults to "<user config dir>/cacheriff/config.yml".
 func Path() (string, error) {
-	if p := os.Getenv(ConfigFileEnvVar); p != "" {
+	if p := os.Getenv(FileEnvVar); p != "" {
 		return p, nil
 	}
 

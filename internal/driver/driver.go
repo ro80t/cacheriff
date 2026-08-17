@@ -6,9 +6,6 @@ package driver
 
 import (
 	"context"
-	"io/fs"
-	"os"
-	"path/filepath"
 
 	"cacheriff/internal/platform"
 )
@@ -49,6 +46,11 @@ type Entry struct {
 // Driver is implemented once per package manager. All methods must be
 // safe to call even when the underlying package manager is not
 // installed; Available reports that up front so callers can skip it.
+//
+// Concrete drivers embed base (see base.go) to pick up the common
+// plumbing (ID, Name, Available, SupportedOS, LocalArtifactDirNames)
+// and only implement the parts that genuinely differ between package
+// managers: CacheEntries, GlobalPackages, and Remove.
 type Driver interface {
 	// ID is a stable, lowercase identifier, e.g. "cargo", "npm".
 	ID() string
@@ -100,31 +102,4 @@ func SupportsCurrentOS(d Driver) bool {
 		}
 	}
 	return false
-}
-
-// dirSize walks path and sums the size of every regular file under it.
-func dirSize(path string) (int64, error) {
-	var size int64
-	err := filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// Skip entries we can't stat (permissions, races) rather
-			// than failing the whole walk.
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		size += info.Size()
-		return nil
-	})
-	return size, err
-}
-
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

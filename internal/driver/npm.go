@@ -11,25 +11,19 @@ import (
 	"cacheriff/internal/platform"
 )
 
-type npmDriver struct{}
+type npmDriver struct {
+	base
+}
 
 // NewNPMDriver returns the Driver for npm (Node.js packages).
-func NewNPMDriver() Driver { return npmDriver{} }
-
-func (npmDriver) ID() string   { return "npm" }
-func (npmDriver) Name() string { return "npm" }
-
-func (npmDriver) Available() bool {
-	_, err := exec.LookPath("npm")
-	return err == nil
-}
-
-func (npmDriver) SupportedOS() []platform.OS {
-	return []platform.OS{platform.Windows, platform.MacOS, platform.Linux}
-}
-
-func (npmDriver) LocalArtifactDirNames() []string {
-	return []string{"node_modules"}
+func NewNPMDriver() Driver {
+	return npmDriver{base: base{
+		id:          "npm",
+		name:        "npm",
+		binary:      "npm",
+		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
+		dirs:        []string{"node_modules"},
+	}}
 }
 
 func npmConfigGet(ctx context.Context, key string) (string, error) {

@@ -14,25 +14,19 @@ import (
 	"cacheriff/internal/platform"
 )
 
-type cargoDriver struct{}
+type cargoDriver struct {
+	base
+}
 
 // NewCargoDriver returns the Driver for Rust's cargo/crates.io toolchain.
-func NewCargoDriver() Driver { return cargoDriver{} }
-
-func (cargoDriver) ID() string   { return "cargo" }
-func (cargoDriver) Name() string { return "Cargo" }
-
-func (cargoDriver) Available() bool {
-	_, err := exec.LookPath("cargo")
-	return err == nil
-}
-
-func (cargoDriver) SupportedOS() []platform.OS {
-	return []platform.OS{platform.Windows, platform.MacOS, platform.Linux}
-}
-
-func (cargoDriver) LocalArtifactDirNames() []string {
-	return []string{"target"}
+func NewCargoDriver() Driver {
+	return cargoDriver{base: base{
+		id:          "cargo",
+		name:        "Cargo",
+		binary:      "cargo",
+		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
+		dirs:        []string{"target"},
+	}}
 }
 
 func cargoHome() (string, error) {

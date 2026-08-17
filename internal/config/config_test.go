@@ -49,7 +49,7 @@ func TestExampleConfigMatchesDefaultTheme(t *testing.T) {
 
 func TestPathHonorsConfigFileEnvVar(t *testing.T) {
 	want := filepath.Join(t.TempDir(), "custom.yml")
-	t.Setenv(ConfigFileEnvVar, want)
+	t.Setenv(FileEnvVar, want)
 
 	got, err := Path()
 	if err != nil {
@@ -65,7 +65,7 @@ func TestLoadReadsFileFromEnvVar(t *testing.T) {
 	if err := os.WriteFile(path, []byte("gui:\n  theme:\n    primaryColor: \"#123456\"\n"), 0o644); err != nil {
 		t.Fatalf("write temp config: %v", err)
 	}
-	t.Setenv(ConfigFileEnvVar, path)
+	t.Setenv(FileEnvVar, path)
 
 	cfg, err := Load()
 	if err != nil {
