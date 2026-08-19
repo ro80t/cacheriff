@@ -34,8 +34,12 @@ func npmConfigGet(ctx context.Context, key string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func (d npmDriver) CacheDir(ctx context.Context) (string, error) {
+	return npmConfigGet(ctx, "cache")
+}
+
 func (d npmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
-	cacheDir, err := npmConfigGet(ctx, "cache")
+	cacheDir, err := d.CacheDir(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +58,16 @@ func (d npmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	}}, nil
 }
 
-// npmListOutput is the shape of `npm ls -g --depth=0 --json`.
+func (d npmDriver) GlobalInstallDir(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "npm", "root", "-g").Output()
+	if err != nil {
+		return "", fmt.Errorf("npm root -g: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// npmListOutput is the shape of `npm ls -g --depth=0 --json` and
+// `npm ls --depth=0 --json`.
 type npmListOutput struct {
 	Dependencies map[string]struct {
 		Version string `json:"version"`
@@ -62,11 +75,10 @@ type npmListOutput struct {
 }
 
 func (d npmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
-	rootOut, err := exec.CommandContext(ctx, "npm", "root", "-g").Output()
+	globalRoot, err := d.GlobalInstallDir(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("npm root -g: %w", err)
+		return nil, err
 	}
-	globalRoot := strings.TrimSpace(string(rootOut))
 
 	// `npm ls -g` exits non-zero whenever the dependency tree has any
 	// problem (e.g. one extraneous/invalid package) even though it
@@ -77,12 +89,39 @@ func (d npmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		return nil, fmt.Errorf("npm ls -g --json: parse output: %w", err)
 	}
+	return npmEntriesFromList(globalRoot, parsed, KindGlobalPackage), nil
+}
 
+func (d npmDriver) LocalInstallDir(root string) (string, bool) {
+	return filepath.Join(root, "node_modules"), true
+}
+
+func (d npmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
+	dir, _ := d.LocalInstallDir(root)
+	if !pathExists(dir) {
+		return nil, nil
+	}
+
+	// Same non-zero-exit caveat as GlobalPackages above applies here.
+	cmd := exec.CommandContext(ctx, "npm", "ls", "--depth=0", "--json")
+	cmd.Dir = root
+	out, _ := cmd.Output()
+	var parsed npmListOutput
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		return nil, fmt.Errorf("npm ls --json: parse output: %w", err)
+	}
+	return npmEntriesFromList(dir, parsed, KindLocalPackage), nil
+}
+
+// npmEntriesFromList turns a parsed `npm ls [-g] --json` result into
+// Entries, resolving each package's on-disk path under baseDir (a
+// node_modules directory, local or global).
+func npmEntriesFromList(baseDir string, parsed npmListOutput, kind EntryKind) []Entry {
 	entries := make([]Entry, 0, len(parsed.Dependencies))
 	for name, meta := range parsed.Dependencies {
 		// Scoped package names ("@scope/name") map to a nested
-		// "@scope/name" directory under the global root.
-		parts := append([]string{globalRoot}, strings.Split(name, "/")...)
+		// "@scope/name" directory under baseDir.
+		parts := append([]string{baseDir}, strings.Split(name, "/")...)
 		p := filepath.Join(parts...)
 
 		size, err := dirSize(p)
@@ -93,11 +132,11 @@ func (d npmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 			Name:    name,
 			Version: meta.Version,
 			Path:    p,
-			Kind:    KindGlobalPackage,
+			Kind:    kind,
 			Size:    size,
 		})
 	}
-	return entries, nil
+	return entries
 }
 
 func (npmDriver) Remove(ctx context.Context, e Entry) error {

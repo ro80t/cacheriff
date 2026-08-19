@@ -20,6 +20,10 @@ const (
 	// KindGlobalPackage is a package installed globally via the
 	// package manager (e.g. `cargo install`, `npm install -g`).
 	KindGlobalPackage
+	// KindLocalPackage is a package installed into a single project's
+	// local install directory (e.g. a package under a project's
+	// node_modules, or a dependency pinned in a project's lockfile).
+	KindLocalPackage
 )
 
 func (k EntryKind) String() string {
@@ -28,6 +32,8 @@ func (k EntryKind) String() string {
 		return "cache"
 	case KindGlobalPackage:
 		return "global package"
+	case KindLocalPackage:
+		return "local package"
 	default:
 		return "unknown"
 	}
@@ -50,7 +56,8 @@ type Entry struct {
 // Concrete drivers embed base (see base.go) to pick up the common
 // plumbing (ID, Name, Available, SupportedOS, LocalArtifactDirNames)
 // and only implement the parts that genuinely differ between package
-// managers: CacheEntries, GlobalPackages, and Remove.
+// managers: CacheDir, CacheEntries, GlobalInstallDir, GlobalPackages,
+// LocalInstallDir, LocalPackages, and Remove.
 type Driver interface {
 	// ID is a stable, lowercase identifier, e.g. "cargo", "npm".
 	ID() string
@@ -63,13 +70,37 @@ type Driver interface {
 	// runs on. Cross-platform tools like cargo/npm list all of them;
 	// OS-specific tools (e.g. Homebrew, winget) should restrict this.
 	SupportedOS() []platform.OS
+	// CacheDir reports the root directory of this package manager's
+	// shared, machine-wide cache (e.g. npm's `cache` config value,
+	// cargo's CARGO_HOME). Callers that just want the individual
+	// cache entries (with sizes) should use CacheEntries instead.
+	CacheDir(ctx context.Context) (string, error)
 	// CacheEntries reports the shared, machine-wide caches this
 	// package manager maintains (downloaded archives, build/index
 	// caches, etc).
 	CacheEntries(ctx context.Context) ([]Entry, error)
+	// GlobalInstallDir reports the directory this package manager
+	// installs global/system-wide packages into (e.g. `npm root -g`,
+	// cargo's CARGO_HOME/bin). Callers that just want the individual
+	// installed packages (with sizes) should use GlobalPackages
+	// instead.
+	GlobalInstallDir(ctx context.Context) (string, error)
 	// GlobalPackages reports packages installed globally/system-wide
 	// via this package manager.
 	GlobalPackages(ctx context.Context) ([]Entry, error)
+	// LocalInstallDir reports the directory under root where this
+	// package manager installs a single project's local packages
+	// (e.g. root/node_modules for npm), and whether it has one at
+	// all: some package managers (e.g. cargo) have no per-project
+	// install directory because resolved dependencies live only in
+	// the shared cache.
+	LocalInstallDir(root string) (dir string, ok bool)
+	// LocalPackages reports the packages a project rooted at root
+	// depends on locally (e.g. the contents of root's node_modules
+	// for npm, or the crates pinned in root's Cargo.lock for cargo).
+	// It returns (nil, nil) when root has nothing for this package
+	// manager to report.
+	LocalPackages(ctx context.Context, root string) ([]Entry, error)
 	// LocalArtifactDirNames lists directory names that mark a
 	// project-local install/build artifact for this package manager
 	// (e.g. "node_modules" for npm, "target" for cargo), for use by
