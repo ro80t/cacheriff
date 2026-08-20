@@ -103,12 +103,12 @@ func (m Model) renderSidebar() string {
 	b.WriteString(panelTitleStyle.Render("Package Managers"))
 	b.WriteString("\n\n")
 
-	if len(m.items) == 0 {
+	if len(m.drivers) == 0 {
 		b.WriteString(unavailableItemStyle.Render("No supported package managers for this OS."))
 		return b.String()
 	}
 
-	for i, it := range m.items {
+	for i, it := range m.drivers {
 		marker := "  "
 		if i == m.cursor {
 			marker = "❯ "

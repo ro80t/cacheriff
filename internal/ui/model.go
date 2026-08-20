@@ -48,11 +48,11 @@ type Model struct {
 	keys keyMap
 	help help.Model
 
-	items  []driverItem
-	cursor int
+	drivers []driverItem
+	cursor  int
 
 	focus     focusedPanel
-	activeIdx int // index into items for the currently loaded driver, -1 if none
+	activeIdx int // index into drivers for the currently loaded driver, -1 if none
 
 	state    loadState
 	loadErr  error
@@ -72,12 +72,12 @@ type Model struct {
 // NewModel builds the initial application state, detecting which
 // package managers are available on this machine.
 func NewModel() Model {
-	var items []driverItem
+	var drivers []driverItem
 	for _, d := range driver.All() {
 		if !driver.SupportsCurrentOS(d) {
 			continue
 		}
-		items = append(items, driverItem{driver: d, available: d.Available()})
+		drivers = append(drivers, driverItem{driver: d, available: d.Available()})
 	}
 
 	sp := spinner.New()
@@ -87,7 +87,7 @@ func NewModel() Model {
 	return Model{
 		keys:      newKeyMap(),
 		help:      help.New(),
-		items:     items,
+		drivers:   drivers,
 		activeIdx: -1,
 		spinner:   sp,
 		viewport:  viewport.New(0, 0),
@@ -179,7 +179,7 @@ func (m Model) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.keys.Down):
-		if m.cursor < len(m.items)-1 {
+		if m.cursor < len(m.drivers)-1 {
 			m.cursor++
 		}
 
@@ -197,7 +197,7 @@ func (m Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // selectDriver starts (or restarts) loading data for the item at idx.
 func (m Model) selectDriver(idx int) (tea.Model, tea.Cmd) {
-	item := m.items[idx]
+	item := m.drivers[idx]
 	m.activeIdx = idx
 	m.focus = focusMain
 
@@ -225,8 +225,8 @@ func (m Model) selectDriver(idx int) (tea.Model, tea.Cmd) {
 
 // activeItem returns the item currently shown in the main panel, if any.
 func (m Model) activeItem() (driverItem, bool) {
-	if m.activeIdx < 0 || m.activeIdx >= len(m.items) {
+	if m.activeIdx < 0 || m.activeIdx >= len(m.drivers) {
 		return driverItem{}, false
 	}
-	return m.items[m.activeIdx], true
+	return m.drivers[m.activeIdx], true
 }
