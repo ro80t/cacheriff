@@ -81,7 +81,7 @@ func NewModel() Model {
 	}
 
 	sp := spinner.New()
-	sp.Spinner = spinner.Dot
+	sp.Spinner = spinner.Line
 	sp.Style = panelTitleStyle
 
 	return Model{
