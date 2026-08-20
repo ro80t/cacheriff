@@ -115,6 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == loadInProgress {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
+			m.viewport.SetContent(m.renderMainContent())
 			return m, cmd
 		}
 		return m, nil
