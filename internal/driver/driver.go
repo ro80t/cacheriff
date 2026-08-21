@@ -120,6 +120,10 @@ func All() []Driver {
 	return []Driver{
 		NewCargoDriver(),
 		NewNPMDriver(),
+		NewPnpmDriver(),
+		NewYarnDriver(),
+		NewBunDriver(),
+		NewDenoDriver(),
 	}
 }
 
