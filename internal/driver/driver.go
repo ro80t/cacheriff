@@ -119,6 +119,7 @@ type Driver interface {
 func All() []Driver {
 	return []Driver{
 		NewCargoDriver(),
+		NewGoDriver(),
 		NewNPMDriver(),
 		NewPnpmDriver(),
 		NewYarnDriver(),
