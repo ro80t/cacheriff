@@ -16,6 +16,16 @@ type panelLayout struct {
 	sidebarOuterWidth int
 	mainOuterWidth    int
 
+	// sidebarBoxWidth/mainBoxWidth are passed to panelStyle.Width():
+	// lipgloss's Width() already accounts for the style's own
+	// horizontal padding internally, so these only need to exclude
+	// the border (2 cols), not the padding too.
+	sidebarBoxWidth int
+	mainBoxWidth    int
+
+	// sidebarContentWidth/mainContentWidth are the actual usable text
+	// columns once both border AND padding are excluded - what
+	// viewport.Width (and any other width-aware text wrapping) needs.
 	sidebarContentWidth  int
 	sidebarContentHeight int
 	mainContentWidth     int
@@ -50,11 +60,14 @@ func (m Model) computeLayout() panelLayout {
 		mainOuterWidth = 10
 	}
 
-	// Each panel spends 2 columns/rows on its border and 2
-	// columns on left/right padding (panelStyle uses Padding(0, 1)).
+	// Each panel spends 2 columns/rows on its border and 2 columns on
+	// left/right padding (panelStyle uses Padding(0, 1); there's no
+	// vertical padding, so heights only need the border subtracted).
 	return panelLayout{
 		sidebarOuterWidth:    sidebarOuterWidth,
 		mainOuterWidth:       mainOuterWidth,
+		sidebarBoxWidth:      maxInt(1, sidebarOuterWidth-2),
+		mainBoxWidth:         maxInt(1, mainOuterWidth-2),
 		sidebarContentWidth:  maxInt(1, sidebarOuterWidth-4),
 		sidebarContentHeight: maxInt(1, bodyHeight-2),
 		mainContentWidth:     maxInt(1, mainOuterWidth-4),
@@ -203,7 +216,7 @@ func (m Model) View() string {
 	l := m.computeLayout()
 
 	sidebar := panelStyle.
-		Width(l.sidebarContentWidth).
+		Width(l.sidebarBoxWidth).
 		Height(l.sidebarContentHeight).
 		BorderForeground(borderColor(m.focus == focusSidebar)).
 		Render(m.renderSidebar())
@@ -214,7 +227,7 @@ func (m Model) View() string {
 		m.viewport.View(),
 	)
 	main := panelStyle.
-		Width(l.mainContentWidth).
+		Width(l.mainBoxWidth).
 		Height(l.mainContentHeight).
 		BorderForeground(borderColor(m.focus == focusMain)).
 		Render(mainBody)

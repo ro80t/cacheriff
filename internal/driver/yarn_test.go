@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,7 +54,7 @@ func TestPackagesFromGlobalManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := packagesFromGlobalManifest(dir, KindGlobalPackage)
+	entries, err := packagesFromGlobalManifest(context.Background(), dir, KindGlobalPackage)
 	if err != nil {
 		t.Fatalf("packagesFromGlobalManifest: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestPackagesFromGlobalManifest(t *testing.T) {
 }
 
 func TestPackagesFromGlobalManifestMissing(t *testing.T) {
-	entries, err := packagesFromGlobalManifest(t.TempDir(), KindGlobalPackage)
+	entries, err := packagesFromGlobalManifest(context.Background(), t.TempDir(), KindGlobalPackage)
 	if err != nil {
 		t.Fatalf("packagesFromGlobalManifest: %v", err)
 	}

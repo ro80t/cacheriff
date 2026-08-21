@@ -1,6 +1,9 @@
 package driver
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestParsePnpmList(t *testing.T) {
 	// Real shape of `pnpm list -g --depth=0 --json`'s output.
@@ -19,7 +22,7 @@ func TestParsePnpmList(t *testing.T) {
 		}
 	]`)
 
-	entries, err := parsePnpmList(data, KindGlobalPackage)
+	entries, err := parsePnpmList(context.Background(), data, KindGlobalPackage)
 	if err != nil {
 		t.Fatalf("parsePnpmList: %v", err)
 	}
@@ -43,7 +46,7 @@ func TestParsePnpmListNoDependencies(t *testing.T) {
 	// installed, rather than emitting an empty object.
 	data := []byte(`[{"path": "C:\\Users\\me\\AppData\\Local\\pnpm\\global\\5", "private": false}]`)
 
-	entries, err := parsePnpmList(data, KindGlobalPackage)
+	entries, err := parsePnpmList(context.Background(), data, KindGlobalPackage)
 	if err != nil {
 		t.Fatalf("parsePnpmList: %v", err)
 	}

@@ -42,7 +42,7 @@ func (d pnpmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if !pathExists(dir) {
 		return nil, nil
 	}
-	size, err := dirSize(dir)
+	size, err := dirSize(ctx, dir)
 	if err != nil {
 		size = -1
 	}
@@ -77,7 +77,7 @@ func (d pnpmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pnpm list -g --json: %w", err)
 	}
-	return parsePnpmList(out, KindGlobalPackage)
+	return parsePnpmList(ctx, out, KindGlobalPackage)
 }
 
 func (pnpmDriver) LocalInstallDir(root string) (string, bool) {
@@ -96,10 +96,10 @@ func (d pnpmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, er
 	if err != nil {
 		return nil, fmt.Errorf("pnpm list --json: %w", err)
 	}
-	return parsePnpmList(out, KindLocalPackage)
+	return parsePnpmList(ctx, out, KindLocalPackage)
 }
 
-func parsePnpmList(out []byte, kind EntryKind) ([]Entry, error) {
+func parsePnpmList(ctx context.Context, out []byte, kind EntryKind) ([]Entry, error) {
 	var roots []pnpmListRoot
 	if err := json.Unmarshal(out, &roots); err != nil {
 		return nil, fmt.Errorf("pnpm list --json: parse output: %w", err)
@@ -108,7 +108,7 @@ func parsePnpmList(out []byte, kind EntryKind) ([]Entry, error) {
 	var entries []Entry
 	for _, root := range roots {
 		for name, dep := range root.Dependencies {
-			size, err := dirSize(dep.Path)
+			size, err := dirSize(ctx, dep.Path)
 			if err != nil {
 				size = -1
 			}

@@ -56,7 +56,7 @@ func (d bunDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if !pathExists(dir) {
 		return nil, nil
 	}
-	size, err := dirSize(dir)
+	size, err := dirSize(ctx, dir)
 	if err != nil {
 		size = -1
 	}
@@ -97,7 +97,7 @@ func (d bunDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	for _, spec := range specs {
 		name, version := splitPackageSpec(spec)
 		p := filepath.Join(root, "node_modules", filepath.FromSlash(name))
-		size, err := dirSize(p)
+		size, err := dirSize(ctx, p)
 		if err != nil {
 			size = -1
 		}
@@ -176,7 +176,7 @@ func (d bunDriver) LocalPackages(ctx context.Context, root string) ([]Entry, err
 		}
 		name, version := splitPackageSpec(m[1])
 		p := filepath.Join(dir, filepath.FromSlash(name))
-		size, err := dirSize(p)
+		size, err := dirSize(ctx, p)
 		if err != nil {
 			size = -1
 		}

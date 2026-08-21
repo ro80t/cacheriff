@@ -46,7 +46,7 @@ func (d npmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if !pathExists(cacheDir) {
 		return nil, nil
 	}
-	size, err := dirSize(cacheDir)
+	size, err := dirSize(ctx, cacheDir)
 	if err != nil {
 		size = -1
 	}
@@ -89,7 +89,7 @@ func (d npmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		return nil, fmt.Errorf("npm ls -g --json: parse output: %w", err)
 	}
-	return npmEntriesFromList(globalRoot, parsed, KindGlobalPackage), nil
+	return npmEntriesFromList(ctx, globalRoot, parsed, KindGlobalPackage), nil
 }
 
 func (d npmDriver) LocalInstallDir(root string) (string, bool) {
@@ -110,13 +110,13 @@ func (d npmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, err
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		return nil, fmt.Errorf("npm ls --json: parse output: %w", err)
 	}
-	return npmEntriesFromList(dir, parsed, KindLocalPackage), nil
+	return npmEntriesFromList(ctx, dir, parsed, KindLocalPackage), nil
 }
 
 // npmEntriesFromList turns a parsed `npm ls [-g] --json` result into
 // Entries, resolving each package's on-disk path under baseDir (a
 // node_modules directory, local or global).
-func npmEntriesFromList(baseDir string, parsed npmListOutput, kind EntryKind) []Entry {
+func npmEntriesFromList(ctx context.Context, baseDir string, parsed npmListOutput, kind EntryKind) []Entry {
 	entries := make([]Entry, 0, len(parsed.Dependencies))
 	for name, meta := range parsed.Dependencies {
 		// Scoped package names ("@scope/name") map to a nested
@@ -124,7 +124,7 @@ func npmEntriesFromList(baseDir string, parsed npmListOutput, kind EntryKind) []
 		parts := append([]string{baseDir}, strings.Split(name, "/")...)
 		p := filepath.Join(parts...)
 
-		size, err := dirSize(p)
+		size, err := dirSize(ctx, p)
 		if err != nil {
 			size = -1
 		}

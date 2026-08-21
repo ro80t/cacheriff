@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +22,7 @@ func TestDenoCacheEntriesFromInfo(t *testing.T) {
 		NpmCache:     filepath.Join(dir, "npm-does-not-exist"),
 	}
 
-	entries := denoCacheEntriesFromInfo(info)
+	entries := denoCacheEntriesFromInfo(context.Background(), info)
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1: %+v", len(entries), entries)
 	}

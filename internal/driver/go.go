@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"cacheriff/internal/platform"
 )
@@ -62,23 +63,41 @@ func (d goDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 		{goModCacheName, modCache},
 	}
 
-	var entries []Entry
-	for _, dd := range dirs {
+	// GOMODCACHE in particular can hold a huge number of small files
+	// across many modules, so size these concurrently rather than
+	// paying for each walk one after another.
+	entries := make([]Entry, len(dirs))
+	present := make([]bool, len(dirs))
+	var wg sync.WaitGroup
+	for i, dd := range dirs {
 		if dd.path == "" || !pathExists(dd.path) {
 			continue
 		}
-		size, err := dirSize(dd.path)
-		if err != nil {
-			size = -1
-		}
-		entries = append(entries, Entry{
-			Name: dd.name,
-			Path: dd.path,
-			Kind: KindCache,
-			Size: size,
-		})
+		present[i] = true
+		wg.Add(1)
+		go func(i int, name, path string) {
+			defer wg.Done()
+			size, err := dirSize(ctx, path)
+			if err != nil {
+				size = -1
+			}
+			entries[i] = Entry{
+				Name: name,
+				Path: path,
+				Kind: KindCache,
+				Size: size,
+			}
+		}(i, dd.name, dd.path)
 	}
-	return entries, nil
+	wg.Wait()
+
+	result := make([]Entry, 0, len(entries))
+	for i, e := range entries {
+		if present[i] {
+			result = append(result, e)
+		}
+	}
+	return result, nil
 }
 
 func (d goDriver) GlobalInstallDir(ctx context.Context) (string, error) {
@@ -235,7 +254,7 @@ func (d goDriver) LocalPackages(ctx context.Context, root string) ([]Entry, erro
 			continue
 		}
 		p := filepath.Join(modCache, escapeModulePath(r.Path)+"@"+escapeModulePath(r.Version))
-		size, err := dirSize(p)
+		size, err := dirSize(ctx, p)
 		if err != nil {
 			size = -1
 		}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"cacheriff/internal/platform"
 )
@@ -57,30 +58,49 @@ func (d cargoDriver) CacheDir(_ context.Context) (string, error) {
 	return cargoHome()
 }
 
-func (d cargoDriver) CacheEntries(_ context.Context) ([]Entry, error) {
+func (d cargoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	home, err := cargoHome()
 	if err != nil {
 		return nil, err
 	}
 
-	var entries []Entry
-	for _, c := range cargoCacheDirs {
+	// Each of these directories can hold thousands of small files
+	// (registry/src in particular, since every dependency ever built
+	// gets its own extracted source tree), so size them concurrently
+	// rather than paying for each walk one after another.
+	entries := make([]Entry, len(cargoCacheDirs))
+	present := make([]bool, len(cargoCacheDirs))
+	var wg sync.WaitGroup
+	for i, c := range cargoCacheDirs {
 		p := filepath.Join(home, c.rel)
 		if !pathExists(p) {
 			continue
 		}
-		size, err := dirSize(p)
-		if err != nil {
-			size = -1
-		}
-		entries = append(entries, Entry{
-			Name: c.name,
-			Path: p,
-			Kind: KindCache,
-			Size: size,
-		})
+		present[i] = true
+		wg.Add(1)
+		go func(i int, name, p string) {
+			defer wg.Done()
+			size, err := dirSize(ctx, p)
+			if err != nil {
+				size = -1
+			}
+			entries[i] = Entry{
+				Name: name,
+				Path: p,
+				Kind: KindCache,
+				Size: size,
+			}
+		}(i, c.name, p)
 	}
-	return entries, nil
+	wg.Wait()
+
+	result := make([]Entry, 0, len(entries))
+	for i, e := range entries {
+		if present[i] {
+			result = append(result, e)
+		}
+	}
+	return result, nil
 }
 
 func (d cargoDriver) GlobalInstallDir(_ context.Context) (string, error) {
@@ -159,7 +179,7 @@ var (
 // they aren't stored anywhere cacheriff could report on. Each
 // dependency's Path points at its extracted source under CARGO_HOME's
 // shared registry cache, when it can be found there.
-func (d cargoDriver) LocalPackages(_ context.Context, root string) ([]Entry, error) {
+func (d cargoDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
 	lockPath := filepath.Join(root, "Cargo.lock")
 	data, err := os.ReadFile(lockPath)
 	if err != nil {
@@ -182,7 +202,7 @@ func (d cargoDriver) LocalPackages(_ context.Context, root string) ([]Entry, err
 			p := cargoRegistrySrcPath(home, name, version)
 			size := int64(-1)
 			if p != "" {
-				if s, err := dirSize(p); err == nil {
+				if s, err := dirSize(ctx, p); err == nil {
 					size = s
 				}
 			}

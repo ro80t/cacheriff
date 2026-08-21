@@ -48,7 +48,7 @@ func (d yarnDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if !pathExists(dir) {
 		return nil, nil
 	}
-	size, err := dirSize(dir)
+	size, err := dirSize(ctx, dir)
 	if err != nil {
 		size = -1
 	}
@@ -85,10 +85,10 @@ func (d yarnDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return packagesFromGlobalManifest(globalDir, KindGlobalPackage)
+	return packagesFromGlobalManifest(ctx, globalDir, KindGlobalPackage)
 }
 
-func packagesFromGlobalManifest(globalDir string, kind EntryKind) ([]Entry, error) {
+func packagesFromGlobalManifest(ctx context.Context, globalDir string, kind EntryKind) ([]Entry, error) {
 	manifestPath := filepath.Join(globalDir, "package.json")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -109,7 +109,7 @@ func packagesFromGlobalManifest(globalDir string, kind EntryKind) ([]Entry, erro
 	var entries []Entry
 	for name := range manifest.Dependencies {
 		p := filepath.Join(nodeModules, filepath.FromSlash(name))
-		size, err := dirSize(p)
+		size, err := dirSize(ctx, p)
 		if err != nil {
 			size = -1
 		}
@@ -149,7 +149,7 @@ func (d yarnDriver) LocalPackages(ctx context.Context, root string) ([]Entry, er
 	for _, spec := range specs {
 		name, version := splitPackageSpec(spec)
 		p := filepath.Join(dir, filepath.FromSlash(name))
-		size, err := dirSize(p)
+		size, err := dirSize(ctx, p)
 		if err != nil {
 			size = -1
 		}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"cacheriff/internal/platform"
 )
@@ -63,10 +64,10 @@ func (d denoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return denoCacheEntriesFromInfo(info), nil
+	return denoCacheEntriesFromInfo(ctx, info), nil
 }
 
-func denoCacheEntriesFromInfo(info denoInfo) []Entry {
+func denoCacheEntriesFromInfo(ctx context.Context, info denoInfo) []Entry {
 	dirs := []struct{ name, path string }{
 		{"Remote module cache", info.ModulesCache},
 		{"npm package cache", info.NpmCache},
@@ -74,23 +75,42 @@ func denoCacheEntriesFromInfo(info denoInfo) []Entry {
 		{"JSR/registry cache", info.RegistryCache},
 	}
 
-	var entries []Entry
-	for _, dd := range dirs {
+	// A long-lived DENO_DIR (especially the remote module cache) can
+	// accumulate a lot of files, so size these concurrently rather
+	// than paying for each walk one after another - the same
+	// treatment CacheEntries gets for cargo and go.
+	entries := make([]Entry, len(dirs))
+	present := make([]bool, len(dirs))
+	var wg sync.WaitGroup
+	for i, dd := range dirs {
 		if dd.path == "" || !pathExists(dd.path) {
 			continue
 		}
-		size, err := dirSize(dd.path)
-		if err != nil {
-			size = -1
-		}
-		entries = append(entries, Entry{
-			Name: dd.name,
-			Path: dd.path,
-			Kind: KindCache,
-			Size: size,
-		})
+		present[i] = true
+		wg.Add(1)
+		go func(i int, name, path string) {
+			defer wg.Done()
+			size, err := dirSize(ctx, path)
+			if err != nil {
+				size = -1
+			}
+			entries[i] = Entry{
+				Name: name,
+				Path: path,
+				Kind: KindCache,
+				Size: size,
+			}
+		}(i, dd.name, dd.path)
 	}
-	return entries
+	wg.Wait()
+
+	result := make([]Entry, 0, len(entries))
+	for i, e := range entries {
+		if present[i] {
+			result = append(result, e)
+		}
+	}
+	return result
 }
 
 func denoInstallRoot() (string, error) {
