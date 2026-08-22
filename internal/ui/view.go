@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 // panelLayout holds the pixel budget computed for the current
@@ -183,6 +184,8 @@ func (m Model) renderMainContent() string {
 }
 
 func (m Model) renderEntries() string {
+	contentWidth := m.computeLayout().mainContentWidth
+
 	var b strings.Builder
 
 	b.WriteString(sectionTitleStyle.Render(fmt.Sprintf("Caches (%d)", len(m.cache))))
@@ -192,7 +195,11 @@ func (m Model) renderEntries() string {
 		b.WriteString("\n")
 	}
 	for _, e := range m.cache {
-		b.WriteString(fmt.Sprintf("  %-40s %10s  %s\n", e.Name, formatBytes(e.Size), e.Path))
+		prefix := fmt.Sprintf("  %-40s %10s  ", e.Name, formatBytes(e.Size))
+		for _, chunk := range textwrap.ContentLine(prefix+e.Path, contentWidth, lipgloss.Width(prefix)) {
+			b.WriteString(chunk)
+			b.WriteString("\n")
+		}
 	}
 
 	b.WriteString("\n")
@@ -203,7 +210,11 @@ func (m Model) renderEntries() string {
 		b.WriteString("\n")
 	}
 	for _, e := range m.packages {
-		b.WriteString(fmt.Sprintf("  %-30s v%-14s %10s\n", e.Name, e.Version, formatBytes(e.Size)))
+		line := fmt.Sprintf("  %-30s v%-14s %10s", e.Name, e.Version, formatBytes(e.Size))
+		for _, chunk := range textwrap.ContentLine(line, contentWidth, 4) {
+			b.WriteString(chunk)
+			b.WriteString("\n")
+		}
 	}
 
 	return b.String()
