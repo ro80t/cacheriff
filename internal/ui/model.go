@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -94,6 +95,9 @@ func NewModel() Model {
 		}
 		drivers = append(drivers, driverItem{driver: d, available: d.Available()})
 	}
+	sort.Slice(drivers, func(i, j int) bool {
+		return drivers[i].driver.Name() < drivers[j].driver.Name()
+	})
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
