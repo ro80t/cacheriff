@@ -126,29 +126,86 @@ func (d cargoDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 		return nil, err
 	}
 
+	entries := parseCargoInstallList(out, binDir)
+	return entries, nil
+}
+
+// parseCargoInstallList parses `cargo install --list`'s output, e.g.:
+//
+//	ripgrep v13.0.0:
+//	    rg
+//	delve v1.27.1:
+//	    dlv
+//
+// returning one Entry per package. The indented lines under each
+// header name that package's installed binaries; parseCargoInstallList
+// stats them in binDir to size the entry, rather than leaving it
+// unmeasured, since (unlike the registry caches) cargo has no separate
+// per-package directory to size instead.
+func parseCargoInstallList(out []byte, binDir string) []Entry {
 	var entries []Entry
+	var name, version string
+	var bins []string
+
+	flush := func() {
+		if name != "" {
+			entries = append(entries, Entry{
+				Name:    name,
+				Version: version,
+				Path:    binDir,
+				Kind:    KindGlobalPackage,
+				Size:    cargoBinSize(binDir, bins),
+			})
+		}
+		name, version = "", ""
+		bins = nil
+	}
+
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, " ") {
-			continue // indented lines list installed binaries, not packages
-		}
-		m := cargoInstallListRe.FindStringSubmatch(line)
-		if m == nil {
+		if line == "" {
 			continue
 		}
-		entries = append(entries, Entry{
-			Name:    m[1],
-			Version: m[2],
-			Path:    binDir,
-			Kind:    KindGlobalPackage,
-			Size:    -1,
-		})
+		if strings.HasPrefix(line, " ") {
+			if name != "" {
+				bins = append(bins, strings.TrimSpace(line))
+			}
+			continue
+		}
+		flush()
+		if m := cargoInstallListRe.FindStringSubmatch(line); m != nil {
+			name, version = m[1], m[2]
+		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("cargo install --list: parse output: %w", err)
+	flush()
+	return entries
+}
+
+// cargoBinSize sums the on-disk size of a package's installed binaries
+// within binDir. On Windows the binary file carries an additional
+// ".exe" suffix that `cargo install --list` doesn't include, so that's
+// tried as a fallback. Returns -1 if none of the binaries could be
+// found (e.g. the package installed no binaries, or they were removed
+// outside of cargo).
+func cargoBinSize(binDir string, bins []string) int64 {
+	var total int64
+	var found bool
+	for _, b := range bins {
+		info, err := os.Stat(filepath.Join(binDir, b))
+		if err != nil {
+			info, err = os.Stat(filepath.Join(binDir, b+".exe"))
+		}
+		if err != nil {
+			continue
+		}
+		found = true
+		total += info.Size()
 	}
-	return entries, nil
+	if !found {
+		return -1
+	}
+	return total
 }
 
 // cargo has no per-project package install directory: resolved

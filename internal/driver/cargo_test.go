@@ -69,6 +69,57 @@ func TestCargoLocalPackagesNoLockfile(t *testing.T) {
 	}
 }
 
+func TestParseCargoInstallList(t *testing.T) {
+	binDir := t.TempDir()
+	rgPath := filepath.Join(binDir, "rg")
+	if err := os.WriteFile(rgPath, []byte("fake binary contents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// dlv is listed but missing from binDir, so it should size as -1.
+
+	out := "ripgrep v13.0.0:\n    rg\ndelve v1.27.1:\n    dlv\n"
+	entries := parseCargoInstallList([]byte(out), binDir)
+
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2: %+v", len(entries), entries)
+	}
+
+	if entries[0].Name != "ripgrep" || entries[0].Version != "13.0.0" {
+		t.Errorf("got %+v, want name=ripgrep version=13.0.0", entries[0])
+	}
+	wantSize, err := os.Stat(rgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].Size != wantSize.Size() {
+		t.Errorf("got Size=%d, want %d", entries[0].Size, wantSize.Size())
+	}
+
+	if entries[1].Name != "delve" || entries[1].Version != "1.27.1" {
+		t.Errorf("got %+v, want name=delve version=1.27.1", entries[1])
+	}
+	if entries[1].Size != -1 {
+		t.Errorf("got Size=%d, want -1 for missing binary", entries[1].Size)
+	}
+}
+
+func TestParseCargoInstallListExeFallback(t *testing.T) {
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "dlv.exe"), []byte("fake"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out := "delve v1.27.1:\n    dlv\n"
+	entries := parseCargoInstallList([]byte(out), binDir)
+
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1: %+v", len(entries), entries)
+	}
+	if entries[0].Size != 4 {
+		t.Errorf("got Size=%d, want 4 (matched via .exe fallback)", entries[0].Size)
+	}
+}
+
 func TestCargoLocalInstallDir(t *testing.T) {
 	d := cargoDriver{}
 	if dir, ok := d.LocalInstallDir("/some/project"); ok || dir != "" {
