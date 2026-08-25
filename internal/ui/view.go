@@ -173,7 +173,7 @@ func (m Model) renderMainContent() string {
 
 	switch m.state {
 	case loadInProgress:
-		return fmt.Sprintf("%s Scanning caches and global packages...", m.spinner.View())
+		return fmt.Sprintf("%s Scanning caches and packages...", m.spinner.View())
 	case loadError:
 		return errorTextStyle.Render("Error: " + m.loadErr.Error())
 	case loadDone:
@@ -203,13 +203,18 @@ func (m Model) renderEntries() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(sectionTitleStyle.Render(fmt.Sprintf("Global packages (%d)", len(m.packages))))
+	b.WriteString(m.renderScopeTabs())
 	b.WriteString("\n")
-	if len(m.packages) == 0 {
+
+	entries := m.globalPackages
+	if m.scope == scopeLocal {
+		entries = m.localPackages
+	}
+	if len(entries) == 0 {
 		b.WriteString(unavailableItemStyle.Render("  none found"))
 		b.WriteString("\n")
 	}
-	for _, e := range m.packages {
+	for _, e := range entries {
 		line := fmt.Sprintf("  %-30s v%-14s %10s", e.Name, e.Version, formatBytes(e.Size))
 		for _, chunk := range textwrap.ContentLine(line, contentWidth, 4) {
 			b.WriteString(chunk)
@@ -218,6 +223,22 @@ func (m Model) renderEntries() string {
 	}
 
 	return b.String()
+}
+
+// renderScopeTabs renders the Global/Local package tab selector,
+// highlighting whichever one m.scope currently has selected.
+func (m Model) renderScopeTabs() string {
+	global := fmt.Sprintf("Global packages (%d)", len(m.globalPackages))
+	local := fmt.Sprintf("Local packages (%d)", len(m.localPackages))
+
+	if m.scope == scopeGlobal {
+		global = selectedItemStyle.Render("[ " + global + " ]")
+		local = unavailableItemStyle.Render(local)
+	} else {
+		global = unavailableItemStyle.Render(global)
+		local = selectedItemStyle.Render("[ " + local + " ]")
+	}
+	return global + "   " + local
 }
 
 func (m Model) View() string {

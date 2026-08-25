@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -36,6 +37,17 @@ const (
 // some caches (e.g. npm's) contain very many small files.
 const loadTimeout = 2 * time.Minute
 
+// packageScope selects which package list (global or local) the main
+// panel currently shows below the always-visible caches section. This
+// exists so a future delete feature can act on "the list currently on
+// screen" without ambiguity between the two.
+type packageScope int
+
+const (
+	scopeGlobal packageScope = iota
+	scopeLocal
+)
+
 // driverItem pairs a driver with whether it was detected as installed
 // when the app started.
 type driverItem struct {
@@ -50,14 +62,17 @@ type Model struct {
 
 	drivers []driverItem
 	cursor  int
+	root    string // project directory LocalPackages is evaluated against
 
 	focus     focusedPanel
 	activeIdx int // index into drivers for the currently loaded driver, -1 if none
 
-	state    loadState
-	loadErr  error
-	cache    []driver.Entry
-	packages []driver.Entry
+	state          loadState
+	loadErr        error
+	cache          []driver.Entry
+	globalPackages []driver.Entry
+	localPackages  []driver.Entry
+	scope          packageScope // which of globalPackages/localPackages the main panel shows
 
 	loadGen    int
 	loadCancel context.CancelFunc
@@ -84,10 +99,13 @@ func NewModel() Model {
 	sp.Spinner = spinner.Line
 	sp.Style = panelTitleStyle
 
+	root, _ := os.Getwd()
+
 	return Model{
 		keys:      newKeyMap(),
 		help:      help.New(),
 		drivers:   drivers,
+		root:      root,
 		activeIdx: -1,
 		spinner:   sp,
 		viewport:  viewport.New(0, 0),
@@ -125,7 +143,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale result from a since-abandoned selection
 		}
 		m.cache = msg.cache
-		m.packages = msg.packages
+		m.globalPackages = msg.global
+		m.localPackages = msg.local
 		if msg.err != nil {
 			m.state = loadError
 			m.loadErr = msg.err
@@ -191,9 +210,28 @@ func (m Model) handleSidebarKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Left):
+		return m.setScope(scopeGlobal), nil
+	case key.Matches(msg, m.keys.Right):
+		return m.setScope(scopeLocal), nil
+	}
+
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
+}
+
+// setScope switches which package list (global or local) the main
+// panel shows and re-renders its content accordingly.
+func (m Model) setScope(s packageScope) Model {
+	if m.scope == s {
+		return m
+	}
+	m.scope = s
+	m.viewport.SetContent(m.renderMainContent())
+	m.viewport.GotoTop()
+	return m
 }
 
 // selectDriver starts (or restarts) loading data for the item at idx.
@@ -201,10 +239,11 @@ func (m Model) selectDriver(idx int) (tea.Model, tea.Cmd) {
 	item := m.drivers[idx]
 	m.activeIdx = idx
 	m.focus = focusMain
+	m.scope = scopeGlobal
 
 	if !item.available {
 		m.state = loadIdle
-		m.cache, m.packages, m.loadErr = nil, nil, nil
+		m.cache, m.globalPackages, m.localPackages, m.loadErr = nil, nil, nil, nil
 		m.viewport.SetContent(m.renderMainContent())
 		return m, nil
 	}
@@ -218,10 +257,10 @@ func (m Model) selectDriver(idx int) (tea.Model, tea.Cmd) {
 
 	m.state = loadInProgress
 	m.loadErr = nil
-	m.cache, m.packages = nil, nil
+	m.cache, m.globalPackages, m.localPackages = nil, nil, nil
 	m.viewport.SetContent(m.renderMainContent())
 
-	return m, tea.Batch(m.spinner.Tick, loadDriverDataCmd(ctx, item.driver, m.loadGen))
+	return m, tea.Batch(m.spinner.Tick, loadDriverDataCmd(ctx, item.driver, m.root, m.loadGen))
 }
 
 // activeItem returns the item currently shown in the main panel, if any.
