@@ -23,47 +23,24 @@ func NewNPMDriver() Driver {
 		binary:      "npm",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"node_modules"},
+		localDir:    "node_modules",
 	}}
 }
 
-func npmConfigGet(ctx context.Context, key string) (string, error) {
-	out, err := exec.CommandContext(ctx, "npm", "config", "get", key).Output()
-	if err != nil {
-		return "", fmt.Errorf("npm config get %s: %w", key, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 func (d npmDriver) CacheDir(ctx context.Context) (string, error) {
-	return npmConfigGet(ctx, "cache")
+	return d.runOutput(ctx, "config", "get", "cache")
 }
 
 func (d npmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
-	cacheDir, err := d.CacheDir(ctx)
+	dir, err := d.CacheDir(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !pathExists(cacheDir) {
-		return nil, nil
-	}
-	size, err := dirSize(ctx, cacheDir)
-	if err != nil {
-		size = -1
-	}
-	return []Entry{{
-		Name: "npm cache",
-		Path: cacheDir,
-		Kind: KindCache,
-		Size: size,
-	}}, nil
+	return d.singleDirCacheEntries(ctx, dir, "npm cache")
 }
 
 func (d npmDriver) GlobalInstallDir(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "npm", "root", "-g").Output()
-	if err != nil {
-		return "", fmt.Errorf("npm root -g: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return d.runOutput(ctx, "root", "-g")
 }
 
 // npmListOutput is the shape of `npm ls -g --depth=0 --json` and
@@ -90,10 +67,6 @@ func (d npmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 		return nil, fmt.Errorf("npm ls -g --json: parse output: %w", err)
 	}
 	return npmEntriesFromList(ctx, globalRoot, parsed, KindGlobalPackage), nil
-}
-
-func (d npmDriver) LocalInstallDir(root string) (string, bool) {
-	return filepath.Join(root, "node_modules"), true
 }
 
 func (d npmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
@@ -139,21 +112,13 @@ func npmEntriesFromList(ctx context.Context, baseDir string, parsed npmListOutpu
 	return entries
 }
 
-func (npmDriver) Remove(ctx context.Context, e Entry) error {
+func (d npmDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
-		out, err := exec.CommandContext(ctx, "npm", "cache", "clean", "--force").CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("npm cache clean --force: %w: %s", err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "cache", "clean", "--force")
 	case KindGlobalPackage:
-		out, err := exec.CommandContext(ctx, "npm", "uninstall", "-g", e.Name).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("npm uninstall -g %s: %w: %s", e.Name, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "uninstall", "-g", e.Name)
 	default:
-		return fmt.Errorf("npm: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }

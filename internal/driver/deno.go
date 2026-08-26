@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 
 	"cacheriff/internal/platform"
 )
@@ -26,6 +25,7 @@ func NewDenoDriver() Driver {
 		binary:      "deno",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"node_modules"},
+		// localDir is left unset: see LocalPackages for why.
 	}}
 }
 
@@ -67,50 +67,17 @@ func (d denoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	return denoCacheEntriesFromInfo(ctx, info), nil
 }
 
+// denoCacheEntriesFromInfo sizes DENO_DIR's subdirectories
+// concurrently: a long-lived DENO_DIR (especially the remote module
+// cache) can accumulate a lot of files, so walking them one after
+// another would be slow.
 func denoCacheEntriesFromInfo(ctx context.Context, info denoInfo) []Entry {
-	dirs := []struct{ name, path string }{
+	return sizeCacheDirs(ctx, []namedDir{
 		{"Remote module cache", info.ModulesCache},
 		{"npm package cache", info.NpmCache},
 		{"TypeScript compile cache", info.TypescriptCache},
 		{"JSR/registry cache", info.RegistryCache},
-	}
-
-	// A long-lived DENO_DIR (especially the remote module cache) can
-	// accumulate a lot of files, so size these concurrently rather
-	// than paying for each walk one after another - the same
-	// treatment CacheEntries gets for cargo and go.
-	entries := make([]Entry, len(dirs))
-	present := make([]bool, len(dirs))
-	var wg sync.WaitGroup
-	for i, dd := range dirs {
-		if dd.path == "" || !pathExists(dd.path) {
-			continue
-		}
-		present[i] = true
-		wg.Add(1)
-		go func(i int, name, path string) {
-			defer wg.Done()
-			size, err := dirSize(ctx, path)
-			if err != nil {
-				size = -1
-			}
-			entries[i] = Entry{
-				Name: name,
-				Path: path,
-				Kind: KindCache,
-				Size: size,
-			}
-		}(i, dd.name, dd.path)
-	}
-	wg.Wait()
-
-	result := make([]Entry, 0, len(entries))
-	for i, e := range entries {
-		if present[i] {
-			result = append(result, e)
-		}
-	}
-	return result
+	})
 }
 
 func denoInstallRoot() (string, error) {
@@ -210,36 +177,27 @@ func readDenoShims(binDir string) ([]Entry, error) {
 	return entries, nil
 }
 
-// LocalInstallDir reports that Deno has no per-project package
-// install directory: unlike npm/yarn/pnpm/bun, Deno resolves
-// dependencies (whether from JSR, npm, or URLs) into its single
-// shared, machine-wide DENO_DIR cache (already covered by
+// LocalPackages always reports nothing: unlike npm/yarn/pnpm/bun,
+// Deno resolves dependencies (whether from JSR, npm, or URLs) into
+// its single shared, machine-wide DENO_DIR cache (already covered by
 // CacheEntries) rather than copying them into the project, much like
-// cargo's shared registry.
-func (denoDriver) LocalInstallDir(_ string) (string, bool) {
-	return "", false
-}
-
-// LocalPackages always reports nothing: see LocalInstallDir. A
-// project's deno.json can declare an "imports" map, but those are
-// version ranges resolved into the shared DENO_DIR cache, not a
-// distinct per-project artifact this driver could report a path or
-// size for.
+// cargo's shared registry - so localDir is left unset in
+// NewDenoDriver, giving the base LocalInstallDir its ("", false)
+// default. A project's deno.json can declare an "imports" map, but
+// those are version ranges resolved into the shared DENO_DIR cache,
+// not a distinct per-project artifact this driver could report a
+// path or size for.
 func (denoDriver) LocalPackages(_ context.Context, _ string) ([]Entry, error) {
 	return nil, nil
 }
 
-func (denoDriver) Remove(ctx context.Context, e Entry) error {
+func (d denoDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
 		return os.RemoveAll(e.Path)
 	case KindGlobalPackage:
-		out, err := exec.CommandContext(ctx, "deno", "uninstall", "-g", e.Name).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("deno uninstall -g %s: %w: %s", e.Name, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "uninstall", "-g", e.Name)
 	default:
-		return fmt.Errorf("deno: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }

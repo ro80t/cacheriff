@@ -54,10 +54,14 @@ type Entry struct {
 // installed; Available reports that up front so callers can skip it.
 //
 // Concrete drivers embed base (see base.go) to pick up the common
-// plumbing (ID, Name, Available, SupportedOS, LocalArtifactDirNames)
-// and only implement the parts that genuinely differ between package
-// managers: CacheDir, CacheEntries, GlobalInstallDir, GlobalPackages,
-// LocalInstallDir, LocalPackages, and Remove.
+// plumbing (ID, Name, Available, SupportedOS, LocalArtifactDirNames,
+// and, for the common case of a single node_modules-style local
+// install directory, LocalInstallDir) and only implement the parts
+// that genuinely differ between package managers: CacheDir,
+// CacheEntries, GlobalInstallDir, GlobalPackages, LocalPackages, and
+// Remove. base also exposes shared helpers (runOutput, runCombined,
+// singleDirCacheEntries, sizeCacheDirs, unsupportedKindErr) that
+// those methods build on.
 type Driver interface {
 	// ID is a stable, lowercase identifier, e.g. "cargo", "npm".
 	ID() string

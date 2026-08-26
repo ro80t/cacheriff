@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"cacheriff/internal/platform"
 )
@@ -29,15 +28,12 @@ func NewYarnDriver() Driver {
 		binary:      "yarn",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"node_modules"},
+		localDir:    "node_modules",
 	}}
 }
 
 func (d yarnDriver) CacheDir(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "yarn", "cache", "dir").Output()
-	if err != nil {
-		return "", fmt.Errorf("yarn cache dir: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return d.runOutput(ctx, "cache", "dir")
 }
 
 func (d yarnDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
@@ -45,27 +41,11 @@ func (d yarnDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !pathExists(dir) {
-		return nil, nil
-	}
-	size, err := dirSize(ctx, dir)
-	if err != nil {
-		size = -1
-	}
-	return []Entry{{
-		Name: "Yarn cache",
-		Path: dir,
-		Kind: KindCache,
-		Size: size,
-	}}, nil
+	return d.singleDirCacheEntries(ctx, dir, "Yarn cache")
 }
 
 func (d yarnDriver) yarnGlobalDir(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "yarn", "global", "dir").Output()
-	if err != nil {
-		return "", fmt.Errorf("yarn global dir: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return d.runOutput(ctx, "global", "dir")
 }
 
 func (d yarnDriver) GlobalInstallDir(ctx context.Context) (string, error) {
@@ -122,10 +102,6 @@ func packagesFromGlobalManifest(ctx context.Context, globalDir string, kind Entr
 		})
 	}
 	return entries, nil
-}
-
-func (yarnDriver) LocalInstallDir(root string) (string, bool) {
-	return filepath.Join(root, "node_modules"), true
 }
 
 func (d yarnDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
@@ -200,21 +176,13 @@ func parseYarnListTree(out []byte) ([]string, error) {
 	return nil, nil
 }
 
-func (yarnDriver) Remove(ctx context.Context, e Entry) error {
+func (d yarnDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
-		out, err := exec.CommandContext(ctx, "yarn", "cache", "clean").CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("yarn cache clean: %w: %s", err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "cache", "clean")
 	case KindGlobalPackage:
-		out, err := exec.CommandContext(ctx, "yarn", "global", "remove", e.Name).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("yarn global remove %s: %w: %s", e.Name, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "global", "remove", e.Name)
 	default:
-		return fmt.Errorf("yarn: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 
 	"cacheriff/internal/platform"
 )
@@ -27,6 +26,11 @@ func NewCargoDriver() Driver {
 		binary:      "cargo",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"target"},
+		// localDir is left unset: cargo has no per-project package
+		// install directory. Resolved dependencies are downloaded once
+		// into CARGO_HOME's shared registry (see cargoCacheDirs) and
+		// referenced from there directly, rather than being copied into
+		// the project like npm's node_modules.
 	}}
 }
 
@@ -58,49 +62,21 @@ func (d cargoDriver) CacheDir(_ context.Context) (string, error) {
 	return cargoHome()
 }
 
+// CacheEntries sizes cargoCacheDirs concurrently: registry/src in
+// particular can hold thousands of small files, since every
+// dependency ever built gets its own extracted source tree, so
+// walking them one after another would be slow.
 func (d cargoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	home, err := cargoHome()
 	if err != nil {
 		return nil, err
 	}
 
-	// Each of these directories can hold thousands of small files
-	// (registry/src in particular, since every dependency ever built
-	// gets its own extracted source tree), so size them concurrently
-	// rather than paying for each walk one after another.
-	entries := make([]Entry, len(cargoCacheDirs))
-	present := make([]bool, len(cargoCacheDirs))
-	var wg sync.WaitGroup
+	dirs := make([]namedDir, len(cargoCacheDirs))
 	for i, c := range cargoCacheDirs {
-		p := filepath.Join(home, c.rel)
-		if !pathExists(p) {
-			continue
-		}
-		present[i] = true
-		wg.Add(1)
-		go func(i int, name, p string) {
-			defer wg.Done()
-			size, err := dirSize(ctx, p)
-			if err != nil {
-				size = -1
-			}
-			entries[i] = Entry{
-				Name: name,
-				Path: p,
-				Kind: KindCache,
-				Size: size,
-			}
-		}(i, c.name, p)
+		dirs[i] = namedDir{name: c.name, path: filepath.Join(home, c.rel)}
 	}
-	wg.Wait()
-
-	result := make([]Entry, 0, len(entries))
-	for i, e := range entries {
-		if present[i] {
-			result = append(result, e)
-		}
-	}
-	return result, nil
+	return sizeCacheDirs(ctx, dirs), nil
 }
 
 func (d cargoDriver) GlobalInstallDir(_ context.Context) (string, error) {
@@ -126,8 +102,7 @@ func (d cargoDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 		return nil, err
 	}
 
-	entries := parseCargoInstallList(out, binDir)
-	return entries, nil
+	return parseCargoInstallList(out, binDir), nil
 }
 
 // parseCargoInstallList parses `cargo install --list`'s output, e.g.:
@@ -206,14 +181,6 @@ func cargoBinSize(binDir string, bins []string) int64 {
 		return -1
 	}
 	return total
-}
-
-// cargo has no per-project package install directory: resolved
-// dependencies are downloaded once into CARGO_HOME's shared registry
-// (see cargoCacheDirs) and referenced from there directly, rather than
-// being copied into the project like npm's node_modules.
-func (cargoDriver) LocalInstallDir(_ string) (string, bool) {
-	return "", false
 }
 
 // cargoLockPackageNameRe, cargoLockPackageVersionRe, and
@@ -309,17 +276,13 @@ func cargoRegistrySrcPath(home, name, version string) string {
 	return matches[0]
 }
 
-func (cargoDriver) Remove(ctx context.Context, e Entry) error {
+func (d cargoDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
 		return os.RemoveAll(e.Path)
 	case KindGlobalPackage:
-		out, err := exec.CommandContext(ctx, "cargo", "uninstall", e.Name).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("cargo uninstall %s: %w: %s", e.Name, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "uninstall", e.Name)
 	default:
-		return fmt.Errorf("cargo: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"cacheriff/internal/platform"
 )
@@ -26,6 +25,7 @@ func NewBunDriver() Driver {
 		binary:      "bun",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"node_modules"},
+		localDir:    "node_modules",
 	}}
 }
 
@@ -53,19 +53,7 @@ func (d bunDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !pathExists(dir) {
-		return nil, nil
-	}
-	size, err := dirSize(ctx, dir)
-	if err != nil {
-		size = -1
-	}
-	return []Entry{{
-		Name: "Bun install cache",
-		Path: dir,
-		Kind: KindCache,
-		Size: size,
-	}}, nil
+	return d.singleDirCacheEntries(ctx, dir, "Bun install cache")
 }
 
 // bunGlobalListHeaderRe matches the first line of `bun pm ls -g`'s
@@ -150,10 +138,6 @@ func parseBunPmList(out []byte) (string, []string, error) {
 	return root, specs, nil
 }
 
-func (bunDriver) LocalInstallDir(root string) (string, bool) {
-	return filepath.Join(root, "node_modules"), true
-}
-
 func (d bunDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
 	dir, _ := d.LocalInstallDir(root)
 	if !pathExists(dir) {
@@ -194,17 +178,13 @@ func (d bunDriver) LocalPackages(ctx context.Context, root string) ([]Entry, err
 	return entries, nil
 }
 
-func (bunDriver) Remove(ctx context.Context, e Entry) error {
+func (d bunDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
 		return os.RemoveAll(e.Path)
 	case KindGlobalPackage:
-		out, err := exec.CommandContext(ctx, "bun", "remove", "-g", e.Name).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("bun remove -g %s: %w: %s", e.Name, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "remove", "-g", e.Name)
 	default:
-		return fmt.Errorf("bun: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }

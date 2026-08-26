@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"cacheriff/internal/platform"
 )
@@ -26,19 +25,15 @@ func NewGoDriver() Driver {
 		name:        "Go",
 		binary:      "go",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
+		// localDir is left unset: Go has no per-project package install
+		// directory. Resolved dependencies are downloaded once into the
+		// shared GOMODCACHE and referenced from there directly (like
+		// cargo's shared registry), never copied into the project.
 	}}
 }
 
-func goEnv(ctx context.Context, key string) (string, error) {
-	out, err := exec.CommandContext(ctx, "go", "env", key).Output()
-	if err != nil {
-		return "", fmt.Errorf("go env %s: %w", key, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 func (d goDriver) CacheDir(ctx context.Context) (string, error) {
-	return goEnv(ctx, "GOCACHE")
+	return d.runOutput(ctx, "env", "GOCACHE")
 }
 
 // Cache entry names are also used by Remove to pick which `go clean`
@@ -48,63 +43,30 @@ const (
 	goModCacheName   = "Module cache (GOMODCACHE)"
 )
 
+// CacheEntries sizes GOCACHE and GOMODCACHE concurrently: GOMODCACHE
+// in particular can hold a huge number of small files across many
+// modules, so walking them one after another would be slow.
 func (d goDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
-	buildCache, err := goEnv(ctx, "GOCACHE")
+	buildCache, err := d.runOutput(ctx, "env", "GOCACHE")
 	if err != nil {
 		return nil, err
 	}
-	modCache, err := goEnv(ctx, "GOMODCACHE")
+	modCache, err := d.runOutput(ctx, "env", "GOMODCACHE")
 	if err != nil {
 		return nil, err
 	}
 
-	dirs := []struct{ name, path string }{
+	return sizeCacheDirs(ctx, []namedDir{
 		{goBuildCacheName, buildCache},
 		{goModCacheName, modCache},
-	}
-
-	// GOMODCACHE in particular can hold a huge number of small files
-	// across many modules, so size these concurrently rather than
-	// paying for each walk one after another.
-	entries := make([]Entry, len(dirs))
-	present := make([]bool, len(dirs))
-	var wg sync.WaitGroup
-	for i, dd := range dirs {
-		if dd.path == "" || !pathExists(dd.path) {
-			continue
-		}
-		present[i] = true
-		wg.Add(1)
-		go func(i int, name, path string) {
-			defer wg.Done()
-			size, err := dirSize(ctx, path)
-			if err != nil {
-				size = -1
-			}
-			entries[i] = Entry{
-				Name: name,
-				Path: path,
-				Kind: KindCache,
-				Size: size,
-			}
-		}(i, dd.name, dd.path)
-	}
-	wg.Wait()
-
-	result := make([]Entry, 0, len(entries))
-	for i, e := range entries {
-		if present[i] {
-			result = append(result, e)
-		}
-	}
-	return result, nil
+	}), nil
 }
 
 func (d goDriver) GlobalInstallDir(ctx context.Context) (string, error) {
-	if bin, err := goEnv(ctx, "GOBIN"); err == nil && bin != "" {
+	if bin, err := d.runOutput(ctx, "env", "GOBIN"); err == nil && bin != "" {
 		return bin, nil
 	}
-	gopath, err := goEnv(ctx, "GOPATH")
+	gopath, err := d.runOutput(ctx, "env", "GOPATH")
 	if err != nil {
 		return "", err
 	}
@@ -206,14 +168,6 @@ func parseGoVersionM(out []byte) []Entry {
 	return entries
 }
 
-// LocalInstallDir reports that Go has no per-project package install
-// directory: resolved dependencies are downloaded once into the
-// shared GOMODCACHE and referenced from there directly (like cargo's
-// shared registry), never copied into the project.
-func (goDriver) LocalInstallDir(_ string) (string, bool) {
-	return "", false
-}
-
 // goModRequire is one entry of `go mod edit -json`'s "Require" list.
 type goModRequire struct {
 	Path     string
@@ -229,7 +183,7 @@ func (d goDriver) LocalPackages(ctx context.Context, root string) ([]Entry, erro
 		return nil, nil
 	}
 
-	modCache, err := goEnv(ctx, "GOMODCACHE")
+	modCache, err := d.runOutput(ctx, "env", "GOMODCACHE")
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +242,7 @@ func escapeModulePath(s string) string {
 	return b.String()
 }
 
-func (goDriver) Remove(ctx context.Context, e Entry) error {
+func (d goDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
 		var flag string
@@ -300,11 +254,7 @@ func (goDriver) Remove(ctx context.Context, e Entry) error {
 		default:
 			return fmt.Errorf("go: unknown cache entry %q", e.Name)
 		}
-		out, err := exec.CommandContext(ctx, "go", "clean", flag).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("go clean %s: %w: %s", flag, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "clean", flag)
 	case KindGlobalPackage:
 		// Go has no built-in "uninstall": the documented way to
 		// remove a globally installed tool is to delete its binary
@@ -314,6 +264,6 @@ func (goDriver) Remove(ctx context.Context, e Entry) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("go: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }

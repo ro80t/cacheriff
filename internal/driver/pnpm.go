@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"cacheriff/internal/platform"
 )
@@ -23,15 +21,12 @@ func NewPnpmDriver() Driver {
 		binary:      "pnpm",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"node_modules"},
+		localDir:    "node_modules",
 	}}
 }
 
 func (d pnpmDriver) CacheDir(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "pnpm", "store", "path").Output()
-	if err != nil {
-		return "", fmt.Errorf("pnpm store path: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return d.runOutput(ctx, "store", "path")
 }
 
 func (d pnpmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
@@ -39,27 +34,11 @@ func (d pnpmDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !pathExists(dir) {
-		return nil, nil
-	}
-	size, err := dirSize(ctx, dir)
-	if err != nil {
-		size = -1
-	}
-	return []Entry{{
-		Name: "pnpm store",
-		Path: dir,
-		Kind: KindCache,
-		Size: size,
-	}}, nil
+	return d.singleDirCacheEntries(ctx, dir, "pnpm store")
 }
 
 func (d pnpmDriver) GlobalInstallDir(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "pnpm", "root", "-g").Output()
-	if err != nil {
-		return "", fmt.Errorf("pnpm root -g: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return d.runOutput(ctx, "root", "-g")
 }
 
 // pnpmListRoot is the shape of one element of `pnpm list [-g]
@@ -78,10 +57,6 @@ func (d pnpmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 		return nil, fmt.Errorf("pnpm list -g --json: %w", err)
 	}
 	return parsePnpmList(ctx, out, KindGlobalPackage)
-}
-
-func (pnpmDriver) LocalInstallDir(root string) (string, bool) {
-	return filepath.Join(root, "node_modules"), true
 }
 
 func (d pnpmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
@@ -124,21 +99,13 @@ func parsePnpmList(ctx context.Context, out []byte, kind EntryKind) ([]Entry, er
 	return entries, nil
 }
 
-func (pnpmDriver) Remove(ctx context.Context, e Entry) error {
+func (d pnpmDriver) Remove(ctx context.Context, e Entry) error {
 	switch e.Kind {
 	case KindCache:
-		out, err := exec.CommandContext(ctx, "pnpm", "store", "prune").CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("pnpm store prune: %w: %s", err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "store", "prune")
 	case KindGlobalPackage:
-		out, err := exec.CommandContext(ctx, "pnpm", "remove", "-g", e.Name).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("pnpm remove -g %s: %w: %s", e.Name, err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		return d.runCombined(ctx, "remove", "-g", e.Name)
 	default:
-		return fmt.Errorf("pnpm: unsupported entry kind %s", e.Kind)
+		return d.unsupportedKindErr(e.Kind)
 	}
 }
