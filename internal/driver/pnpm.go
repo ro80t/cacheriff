@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 type pnpmDriver struct {
@@ -104,7 +105,11 @@ func (d pnpmDriver) Remove(ctx context.Context, e Entry) error {
 	case KindCache:
 		return d.runCombined(ctx, "store", "prune")
 	case KindGlobalPackage:
-		return d.runCombined(ctx, "remove", "-g", e.Name)
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("pnpm: %w", err)
+		}
+		return d.runCombined(ctx, "remove", "-g", name)
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}

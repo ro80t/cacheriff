@@ -74,9 +74,24 @@ type Model struct {
 	globalPackages []driver.Entry
 	localPackages  []driver.Entry
 	scope          packageScope // which of globalPackages/localPackages the main panel shows
+	packageCursor  int          // index into the currently visible package list (see currentEntries)
 
 	loadGen    int
 	loadCancel context.CancelFunc
+
+	// confirmRemove/pendingRemove drive the "uninstall this package?"
+	// confirmation modal; removing/removeErr/removeGen track the
+	// uninstall command itself once confirmed. Only global packages
+	// support uninstall today: every driver's Remove implementation
+	// shells out to the package manager's own uninstall command for
+	// KindGlobalPackage, but none yet implements it for
+	// KindLocalPackage (see internal/driver).
+	confirmRemove bool
+	pendingRemove driver.Entry
+	removing      bool
+	removeErr     error
+	removeGen     int
+	removeCancel  context.CancelFunc
 
 	spinner  spinner.Model
 	viewport viewport.Model
@@ -134,7 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		if m.state == loadInProgress {
+		if m.state == loadInProgress || m.removing {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			m.viewport.SetContent(m.renderMainContent())
@@ -149,6 +164,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cache = msg.cache
 		m.globalPackages = msg.global
 		m.localPackages = msg.local
+		m.packageCursor = 0
 		if msg.err != nil {
 			m.state = loadError
 			m.loadErr = msg.err
@@ -158,16 +174,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderMainContent())
 		m.viewport.GotoTop()
 		return m, nil
+
+	case packageRemovedMsg:
+		if msg.gen != m.removeGen {
+			return m, nil // stale result from a since-abandoned selection
+		}
+		m.removing = false
+		if msg.err != nil {
+			m.removeErr = msg.err
+		} else {
+			m.removeErr = nil
+			m.removeEntryFromList(msg.entry)
+		}
+		m.viewport.SetContent(m.renderMainContent())
+		return m, nil
 	}
 
 	return m, nil
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirmRemove {
+		return m.handleConfirmKey(msg)
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		if m.loadCancel != nil {
 			m.loadCancel()
+		}
+		if m.removeCancel != nil {
+			m.removeCancel()
 		}
 		return m, tea.Quit
 
@@ -219,11 +256,136 @@ func (m Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setScope(scopeGlobal), nil
 	case key.Matches(msg, m.keys.Right):
 		return m.setScope(scopeLocal), nil
+	case key.Matches(msg, m.keys.Delete):
+		return m.startRemove()
+	case key.Matches(msg, m.keys.Up):
+		return m.movePackageCursor(-1), nil
+	case key.Matches(msg, m.keys.Down):
+		return m.movePackageCursor(1), nil
 	}
 
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
+}
+
+// handleConfirmKey handles input while the uninstall confirmation
+// modal is open, trapping all keys except a hard quit.
+func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		return m.confirmRemovePackage()
+	case "n", "esc":
+		m.confirmRemove = false
+		m.pendingRemove = driver.Entry{}
+		return m, nil
+	case "ctrl+c":
+		if m.loadCancel != nil {
+			m.loadCancel()
+		}
+		if m.removeCancel != nil {
+			m.removeCancel()
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// currentEntries returns the package list the main panel is
+// currently showing, per m.scope.
+func (m Model) currentEntries() []driver.Entry {
+	if m.scope == scopeLocal {
+		return m.localPackages
+	}
+	return m.globalPackages
+}
+
+// movePackageCursor shifts the package selection by delta, clamped to
+// the current list, and scrolls the viewport to keep it visible.
+func (m Model) movePackageCursor(delta int) Model {
+	entries := m.currentEntries()
+	if len(entries) == 0 {
+		return m
+	}
+	m.packageCursor = clamp(m.packageCursor+delta, 0, len(entries)-1)
+	m.viewport.SetContent(m.renderMainContent())
+	m.ensureCursorVisible()
+	return m
+}
+
+// ensureCursorVisible scrolls the viewport so the currently selected
+// package row is on screen.
+func (m *Model) ensureCursorVisible() {
+	contentWidth := m.computeLayout().mainContentWidth
+	line := m.packageCursorLineOffset(contentWidth)
+	if line < m.viewport.YOffset {
+		m.viewport.SetYOffset(line)
+	} else if line >= m.viewport.YOffset+m.viewport.Height {
+		m.viewport.SetYOffset(line - m.viewport.Height + 1)
+	}
+}
+
+// startRemove opens the uninstall confirmation modal for the package
+// currently under the cursor. Only global packages can be uninstalled
+// today: uninstalling a locally-installed (per-project) package isn't
+// yet supported by any driver's Remove implementation.
+func (m Model) startRemove() (tea.Model, tea.Cmd) {
+	if m.scope != scopeGlobal {
+		return m, nil
+	}
+	entries := m.currentEntries()
+	if m.packageCursor < 0 || m.packageCursor >= len(entries) {
+		return m, nil
+	}
+	m.pendingRemove = entries[m.packageCursor]
+	m.confirmRemove = true
+	m.removeErr = nil
+	return m, nil
+}
+
+// confirmRemovePackage runs the active driver's uninstall command
+// (e.g. `npm uninstall -g <name>`) for the pending entry in the
+// background, mirroring the async load-then-message pattern
+// selectDriver uses.
+func (m Model) confirmRemovePackage() (tea.Model, tea.Cmd) {
+	item, ok := m.activeItem()
+	m.confirmRemove = false
+	if !ok {
+		return m, nil
+	}
+
+	entry := m.pendingRemove
+	m.pendingRemove = driver.Entry{}
+	m.removing = true
+	m.removeErr = nil
+	m.removeGen++
+	m.viewport.SetContent(m.renderMainContent())
+
+	if m.removeCancel != nil {
+		m.removeCancel()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+	m.removeCancel = cancel
+	return m, tea.Batch(m.spinner.Tick, removePackageCmd(ctx, item.driver, entry, m.removeGen))
+}
+
+// removeEntryFromList drops e from whichever package list it came
+// from once its driver has confirmed it's uninstalled, and keeps the
+// cursor within bounds of the shorter list.
+func (m *Model) removeEntryFromList(e driver.Entry) {
+	list := &m.globalPackages
+	if e.Kind == driver.KindLocalPackage {
+		list = &m.localPackages
+	}
+	for i, cur := range *list {
+		if cur == e {
+			*list = append((*list)[:i], (*list)[i+1:]...)
+			break
+		}
+	}
+	if m.packageCursor >= len(*list) {
+		m.packageCursor = maxInt(0, len(*list)-1)
+	}
 }
 
 // setScope switches which package list (global or local) the main
@@ -233,6 +395,7 @@ func (m Model) setScope(s packageScope) Model {
 		return m
 	}
 	m.scope = s
+	m.packageCursor = 0
 	m.viewport.SetContent(m.renderMainContent())
 	m.viewport.GotoTop()
 	return m
@@ -244,6 +407,10 @@ func (m Model) selectDriver(idx int) (tea.Model, tea.Cmd) {
 	m.activeIdx = idx
 	m.focus = focusMain
 	m.scope = scopeGlobal
+	m.packageCursor = 0
+	m.confirmRemove = false
+	m.removing = false
+	m.removeErr = nil
 
 	if !item.available {
 		m.state = loadIdle

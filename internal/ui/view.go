@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"cacheriff/internal/driver"
 	"cacheriff/internal/platform"
 	"cacheriff/internal/textwrap"
 )
@@ -171,16 +172,72 @@ func (m Model) renderMainContent() string {
 		))
 	}
 
-	switch m.state {
-	case loadInProgress:
+	switch {
+	case m.removing:
+		return fmt.Sprintf("%s Uninstalling %s...", m.spinner.View(), m.pendingRemove.Name)
+	case m.state == loadInProgress:
 		return fmt.Sprintf("%s Scanning caches and packages...", m.spinner.View())
-	case loadError:
+	case m.state == loadError:
 		return errorTextStyle.Render("Error: " + m.loadErr.Error())
-	case loadDone:
+	case m.state == loadDone:
 		return m.renderEntries()
 	default:
 		return ""
 	}
+}
+
+// cacheRowLines renders one cache entry's line(s), wrapped to fit
+// contentWidth. Shared by renderEntries and packageCursorLineOffset so
+// the two stay in lockstep.
+func cacheRowLines(e driver.Entry, contentWidth int) []string {
+	prefix := fmt.Sprintf("  %-40s %10s  ", e.Name, formatBytes(e.Size))
+	return textwrap.ContentLine(prefix+e.Path, contentWidth, lipgloss.Width(prefix))
+}
+
+// cacheSectionLineCount is the number of lines the caches section
+// occupies, before the blank line and scope tabs that follow it.
+func cacheSectionLineCount(cache []driver.Entry, contentWidth int) int {
+	lines := 1 // "Caches (N)" title
+	if len(cache) == 0 {
+		lines++
+	}
+	for _, e := range cache {
+		lines += len(cacheRowLines(e, contentWidth))
+	}
+	return lines
+}
+
+// packageRowLines renders one package entry's line(s), wrapped to fit
+// contentWidth, prefixed with a cursor marker when selected. Shared by
+// renderEntries and packageCursorLineOffset so the two stay in
+// lockstep.
+func packageRowLines(e driver.Entry, contentWidth int, selected bool) []string {
+	marker := "  "
+	if selected {
+		marker = "❯ "
+	}
+	line := fmt.Sprintf("%s%-30s v%-14s %10s", marker, e.Name, e.Version, formatBytes(e.Size))
+	return textwrap.ContentLine(line, contentWidth, 4)
+}
+
+// packageCursorLineOffset reports the line (within renderEntries'
+// output) where the currently selected package row starts, so the
+// viewport can be scrolled to keep it visible.
+func (m Model) packageCursorLineOffset(contentWidth int) int {
+	lines := cacheSectionLineCount(m.cache, contentWidth)
+	lines += 2 // blank line + scope tabs line
+
+	entries := m.currentEntries()
+	if len(entries) == 0 {
+		lines++
+	}
+	for i, e := range entries {
+		if i == m.packageCursor {
+			return lines
+		}
+		lines += len(packageRowLines(e, contentWidth, false))
+	}
+	return lines
 }
 
 func (m Model) renderEntries() string {
@@ -195,8 +252,7 @@ func (m Model) renderEntries() string {
 		b.WriteString("\n")
 	}
 	for _, e := range m.cache {
-		prefix := fmt.Sprintf("  %-40s %10s  ", e.Name, formatBytes(e.Size))
-		for _, chunk := range textwrap.ContentLine(prefix+e.Path, contentWidth, lipgloss.Width(prefix)) {
+		for _, chunk := range cacheRowLines(e, contentWidth) {
 			b.WriteString(chunk)
 			b.WriteString("\n")
 		}
@@ -206,18 +262,24 @@ func (m Model) renderEntries() string {
 	b.WriteString(m.renderScopeTabs())
 	b.WriteString("\n")
 
-	entries := m.globalPackages
-	if m.scope == scopeLocal {
-		entries = m.localPackages
+	if m.removeErr != nil {
+		b.WriteString(errorTextStyle.Render("  Uninstall failed: " + m.removeErr.Error()))
+		b.WriteString("\n")
 	}
+
+	entries := m.currentEntries()
 	if len(entries) == 0 {
 		b.WriteString(unavailableItemStyle.Render("  none found"))
 		b.WriteString("\n")
 	}
-	for _, e := range entries {
-		line := fmt.Sprintf("  %-30s v%-14s %10s", e.Name, e.Version, formatBytes(e.Size))
-		for _, chunk := range textwrap.ContentLine(line, contentWidth, 4) {
-			b.WriteString(chunk)
+	for i, e := range entries {
+		selected := m.scope == scopeGlobal && i == m.packageCursor
+		style := lipgloss.NewStyle()
+		if selected {
+			style = selectedItemStyle
+		}
+		for _, chunk := range packageRowLines(e, contentWidth, selected) {
+			b.WriteString(style.Render(chunk))
 			b.WriteString("\n")
 		}
 	}
@@ -239,6 +301,22 @@ func (m Model) renderScopeTabs() string {
 		local = selectedItemStyle.Render("[ " + local + " ]")
 	}
 	return global + "   " + local
+}
+
+// renderConfirmModal renders the "uninstall this package?" prompt
+// shown in place of the body while m.confirmRemove is set.
+func (m Model) renderConfirmModal() string {
+	e := m.pendingRemove
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorError).Render("Uninstall package?")
+	detail := fmt.Sprintf("%s v%s", e.Name, e.Version)
+	warning := "This runs the package manager's own uninstall\ncommand and cannot be undone."
+	hint := unavailableItemStyle.Render("[y] confirm    [n / esc] cancel")
+
+	content := lipgloss.JoinVertical(lipgloss.Left, title, "", detail, "", warning, "", hint)
+	return panelStyle.
+		BorderForeground(colorError).
+		Padding(1, 2).
+		Render(content)
 }
 
 func (m Model) View() string {
@@ -265,6 +343,10 @@ func (m Model) View() string {
 		Render(mainBody)
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, main)
+
+	if m.confirmRemove {
+		body = lipgloss.Place(m.width, lipgloss.Height(body), lipgloss.Center, lipgloss.Center, m.renderConfirmModal())
+	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), body, m.renderFooter())
 }

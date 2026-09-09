@@ -11,6 +11,7 @@ import (
 	"regexp"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 type bunDriver struct {
@@ -183,7 +184,11 @@ func (d bunDriver) Remove(ctx context.Context, e Entry) error {
 	case KindCache:
 		return os.RemoveAll(e.Path)
 	case KindGlobalPackage:
-		return d.runCombined(ctx, "remove", "-g", e.Name)
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("bun: %w", err)
+		}
+		return d.runCombined(ctx, "remove", "-g", name)
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}

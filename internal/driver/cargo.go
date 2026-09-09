@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 type cargoDriver struct {
@@ -281,7 +282,11 @@ func (d cargoDriver) Remove(ctx context.Context, e Entry) error {
 	case KindCache:
 		return os.RemoveAll(e.Path)
 	case KindGlobalPackage:
-		return d.runCombined(ctx, "uninstall", e.Name)
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("cargo: %w", err)
+		}
+		return d.runCombined(ctx, "uninstall", name)
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}

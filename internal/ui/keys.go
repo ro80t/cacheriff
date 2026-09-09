@@ -9,6 +9,7 @@ type keyMap struct {
 	Left   key.Binding
 	Right  key.Binding
 	Select key.Binding
+	Delete key.Binding
 	Back   key.Binding
 	Tab    key.Binding
 	Help   key.Binding
@@ -37,6 +38,10 @@ func newKeyMap() keyMap {
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "select"),
 		),
+		Delete: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "uninstall"),
+		),
 		Back: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "back"),
@@ -58,13 +63,13 @@ func newKeyMap() keyMap {
 
 // ShortHelp implements help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.Select, k.Tab, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.Select, k.Delete, k.Tab, k.Help, k.Quit}
 }
 
 // FullHelp implements help.KeyMap.
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Left, k.Right, k.Select, k.Back},
+		{k.Up, k.Down, k.Left, k.Right, k.Select, k.Delete, k.Back},
 		{k.Tab, k.Help, k.Quit},
 	}
 }

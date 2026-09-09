@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 type yarnDriver struct {
@@ -181,7 +182,11 @@ func (d yarnDriver) Remove(ctx context.Context, e Entry) error {
 	case KindCache:
 		return d.runCombined(ctx, "cache", "clean")
 	case KindGlobalPackage:
-		return d.runCombined(ctx, "global", "remove", e.Name)
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("yarn: %w", err)
+		}
+		return d.runCombined(ctx, "global", "remove", name)
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}

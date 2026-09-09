@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 type npmDriver struct {
@@ -117,7 +118,11 @@ func (d npmDriver) Remove(ctx context.Context, e Entry) error {
 	case KindCache:
 		return d.runCombined(ctx, "cache", "clean", "--force")
 	case KindGlobalPackage:
-		return d.runCombined(ctx, "uninstall", "-g", e.Name)
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("npm: %w", err)
+		}
+		return d.runCombined(ctx, "uninstall", "-g", name)
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}

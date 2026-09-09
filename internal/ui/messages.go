@@ -12,3 +12,13 @@ type driverDataMsg struct {
 	local  []driver.Entry
 	err    error
 }
+
+// packageRemovedMsg carries the result of running a driver's uninstall
+// command for a single package. gen guards against a stale result
+// finishing after the user has since moved on (e.g. selected a
+// different driver).
+type packageRemovedMsg struct {
+	gen   int
+	entry driver.Entry
+	err   error
+}

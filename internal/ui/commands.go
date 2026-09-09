@@ -51,3 +51,18 @@ func loadDriverDataCmd(ctx context.Context, d driver.Driver, root string, gen in
 		return driverDataMsg{gen: gen, cache: cache, global: global, local: local}
 	}
 }
+
+// removePackageCmd uninstalls a single package by running the
+// driver's own uninstall command (e.g. `npm uninstall -g <name>`,
+// `cargo uninstall <name>`) rather than deleting any files directly,
+// so the package manager's own metadata/lockfiles stay consistent.
+// The package name is passed as a discrete argv element by
+// exec.CommandContext (see internal/driver/base.go), never
+// interpolated into a shell string, so it cannot be used to inject
+// additional shell commands regardless of its contents.
+func removePackageCmd(ctx context.Context, d driver.Driver, e driver.Entry, gen int) tea.Cmd {
+	return func() tea.Msg {
+		err := d.Remove(ctx, e)
+		return packageRemovedMsg{gen: gen, entry: e, err: err}
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"cacheriff/internal/platform"
+	"cacheriff/internal/textwrap"
 )
 
 type denoDriver struct {
@@ -196,7 +197,11 @@ func (d denoDriver) Remove(ctx context.Context, e Entry) error {
 	case KindCache:
 		return os.RemoveAll(e.Path)
 	case KindGlobalPackage:
-		return d.runCombined(ctx, "uninstall", "-g", e.Name)
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("deno: %w", err)
+		}
+		return d.runCombined(ctx, "uninstall", "-g", name)
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}
