@@ -42,13 +42,13 @@ type Theme struct {
 // user hasn't overridden.
 var Default = Theme{
 	Name:           "cacheriff-dark",
-	Primary:        "#FF5FAF",
-	ActiveBorder:   "#FF87D7",
-	InactiveBorder: "#585858",
-	Muted:          "#585858",
-	Faint:          "#808080",
-	Error:          "#FF5F5F",
-	Success:        "#87D787",
+	Primary:        "#FFFFFF",
+	ActiveBorder:   "#00FF00",
+	InactiveBorder: "#808080",
+	Muted:          "#5F5F5F",
+	Faint:          "#5F87FF",
+	Error:          "#FF0000",
+	Success:        "#00FF00",
 }
 
 // Override holds user-supplied color overrides; any empty field falls
