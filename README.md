@@ -3,8 +3,6 @@
 A lazygit-inspired terminal UI for finding and cleaning up package manager
 caches, globally installed packages, and per-project install artifacts.
 
-Supports npm, pnpm, yarn, bun, deno, cargo, and Go.
-
 ## Install
 
 ```sh
@@ -12,6 +10,16 @@ go install github.com/ro80t/cacheriff@latest
 ```
 
 Or build from source — see [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+
+## Supports
+
+- npm
+- pnpm
+- yarn
+- bun
+- deno
+- cargo
+- Go
 
 ## Usage
 
