@@ -3,6 +3,10 @@
 A lazygit-inspired terminal UI for finding and cleaning up package manager
 caches, globally installed packages, and per-project install artifacts.
 
+## Preview
+
+![preview](./images/preview.png)
+
 ## Install
 
 ```sh
