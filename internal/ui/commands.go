@@ -10,14 +10,8 @@ import (
 	"cacheriff/internal/driver"
 )
 
-// loadDriverDataCmd fetches a driver's cache entries and its globally
-// and locally installed packages in the background, tagging the
-// result with gen so the caller can discard it if the user has since
-// moved on. root is the project directory LocalPackages is evaluated
-// against (typically cacheriff's working directory). The three
-// fetches are independent (and cache entries in particular can be
-// slow to size, e.g. a large package-manager cache holding many
-// files), so they run concurrently rather than one after the other.
+// loadDriverDataCmd runs the three independent fetches concurrently,
+// since sizing cache entries in particular can be slow.
 func loadDriverDataCmd(ctx context.Context, d driver.Driver, root string, gen int) tea.Cmd {
 	return func() tea.Msg {
 		var cache, global, local []driver.Entry
@@ -52,14 +46,9 @@ func loadDriverDataCmd(ctx context.Context, d driver.Driver, root string, gen in
 	}
 }
 
-// removePackageCmd uninstalls a single package by running the
-// driver's own uninstall command (e.g. `npm uninstall -g <name>`,
-// `cargo uninstall <name>`) rather than deleting any files directly,
-// so the package manager's own metadata/lockfiles stay consistent.
-// The package name is passed as a discrete argv element by
-// exec.CommandContext (see internal/driver/base.go), never
-// interpolated into a shell string, so it cannot be used to inject
-// additional shell commands regardless of its contents.
+// removePackageCmd runs the driver's own uninstall command rather
+// than deleting files directly, so its metadata/lockfiles stay
+// consistent.
 func removePackageCmd(ctx context.Context, d driver.Driver, e driver.Entry, gen int) tea.Cmd {
 	return func() tea.Msg {
 		err := d.Remove(ctx, e)

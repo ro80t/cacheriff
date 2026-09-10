@@ -32,8 +32,7 @@ func init() {
 }
 
 // SetTheme rebuilds every style in the package from t. Call it once,
-// before the program starts, to apply a user-configured color scheme
-// (see internal/config).
+// before the program starts.
 func SetTheme(t theme.Theme) {
 	colorPrimary = lipgloss.Color(t.Primary)
 	colorMuted = lipgloss.Color(t.Muted)

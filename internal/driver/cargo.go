@@ -19,19 +19,15 @@ type cargoDriver struct {
 	base
 }
 
-// NewCargoDriver returns the Driver for Rust's cargo/crates.io toolchain.
 func NewCargoDriver() Driver {
+	// localDir is left unset: cargo has no per-project install
+	// directory; dependencies live in CARGO_HOME's shared registry.
 	return cargoDriver{base: base{
 		id:          "cargo",
 		name:        "Cargo",
 		binary:      "cargo",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"target"},
-		// localDir is left unset: cargo has no per-project package
-		// install directory. Resolved dependencies are downloaded once
-		// into CARGO_HOME's shared registry (see cargoCacheDirs) and
-		// referenced from there directly, rather than being copied into
-		// the project like npm's node_modules.
 	}}
 }
 
@@ -63,10 +59,6 @@ func (d cargoDriver) CacheDir(_ context.Context) (string, error) {
 	return cargoHome()
 }
 
-// CacheEntries sizes cargoCacheDirs concurrently: registry/src in
-// particular can hold thousands of small files, since every
-// dependency ever built gets its own extracted source tree, so
-// walking them one after another would be slow.
 func (d cargoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	home, err := cargoHome()
 	if err != nil {
@@ -113,11 +105,7 @@ func (d cargoDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 //	delve v1.27.1:
 //	    dlv
 //
-// returning one Entry per package. The indented lines under each
-// header name that package's installed binaries; parseCargoInstallList
-// stats them in binDir to size the entry, rather than leaving it
-// unmeasured, since (unlike the registry caches) cargo has no separate
-// per-package directory to size instead.
+// returning one Entry per package, sized from its binaries in binDir.
 func parseCargoInstallList(out []byte, binDir string) []Entry {
 	var entries []Entry
 	var name, version string
@@ -158,12 +146,8 @@ func parseCargoInstallList(out []byte, binDir string) []Entry {
 	return entries
 }
 
-// cargoBinSize sums the on-disk size of a package's installed binaries
-// within binDir. On Windows the binary file carries an additional
-// ".exe" suffix that `cargo install --list` doesn't include, so that's
-// tried as a fallback. Returns -1 if none of the binaries could be
-// found (e.g. the package installed no binaries, or they were removed
-// outside of cargo).
+// cargoBinSize returns -1 if none of bins were found. It falls back to
+// a ".exe" suffix since `cargo install --list` omits it on Windows.
 func cargoBinSize(binDir string, bins []string) int64 {
 	var total int64
 	var found bool
@@ -184,9 +168,7 @@ func cargoBinSize(binDir string, bins []string) int64 {
 	return total
 }
 
-// cargoLockPackageNameRe, cargoLockPackageVersionRe, and
-// cargoLockPackageSourceRe pull the fields LocalPackages needs out of
-// each "[[package]]" block in a Cargo.lock file, e.g.:
+// Match fields in each "[[package]]" block of a Cargo.lock file, e.g.:
 //
 //	[[package]]
 //	name = "regex"
@@ -198,12 +180,9 @@ var (
 	cargoLockPackageSourceRe  = regexp.MustCompile(`^source\s*=\s*".+"$`)
 )
 
-// LocalPackages reports the dependencies pinned in root's Cargo.lock.
-// Workspace members and path dependencies (which have no "source"
-// line, since they're not fetched from a registry) are skipped, since
-// they aren't stored anywhere cacheriff could report on. Each
-// dependency's Path points at its extracted source under CARGO_HOME's
-// shared registry cache, when it can be found there.
+// LocalPackages skips workspace members and path dependencies (no
+// "source" line, not fetched from a registry), since they aren't
+// stored anywhere cacheriff could report on.
 func (d cargoDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
 	lockPath := filepath.Join(root, "Cargo.lock")
 	data, err := os.ReadFile(lockPath)
@@ -265,10 +244,9 @@ func (d cargoDriver) LocalPackages(ctx context.Context, root string) ([]Entry, e
 	return entries, nil
 }
 
-// cargoRegistrySrcPath finds the extracted source directory for
-// name@version under CARGO_HOME's registry/src cache, without needing
-// to replicate cargo's registry-URL hashing scheme. Returns "" if no
-// match is found (e.g. the crate hasn't been fetched/extracted yet).
+// cargoRegistrySrcPath globs for name@version under registry/src
+// rather than replicating cargo's registry-URL hashing scheme.
+// Returns "" if no match is found.
 func cargoRegistrySrcPath(home, name, version string) string {
 	matches, err := filepath.Glob(filepath.Join(home, "registry", "src", "*", name+"-"+version))
 	if err != nil || len(matches) == 0 {

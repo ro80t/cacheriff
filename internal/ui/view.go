@@ -18,16 +18,12 @@ type panelLayout struct {
 	sidebarOuterWidth int
 	mainOuterWidth    int
 
-	// sidebarBoxWidth/mainBoxWidth are passed to panelStyle.Width():
-	// lipgloss's Width() already accounts for the style's own
-	// horizontal padding internally, so these only need to exclude
-	// the border (2 cols), not the padding too.
+	// Passed to panelStyle.Width(), which already accounts for its own
+	// padding, so these only need to exclude the border (2 cols).
 	sidebarBoxWidth int
 	mainBoxWidth    int
 
-	// sidebarContentWidth/mainContentWidth are the actual usable text
-	// columns once both border AND padding are excluded - what
-	// viewport.Width (and any other width-aware text wrapping) needs.
+	// Usable text columns once both border and padding are excluded.
 	sidebarContentWidth  int
 	sidebarContentHeight int
 	mainContentWidth     int
@@ -62,9 +58,8 @@ func (m Model) computeLayout() panelLayout {
 		mainOuterWidth = 10
 	}
 
-	// Each panel spends 2 columns/rows on its border and 2 columns on
-	// left/right padding (panelStyle uses Padding(0, 1); there's no
-	// vertical padding, so heights only need the border subtracted).
+	// panelStyle has no vertical padding, so heights only subtract the
+	// border (2); widths subtract border + horizontal padding (4).
 	return panelLayout{
 		sidebarOuterWidth:    sidebarOuterWidth,
 		mainOuterWidth:       mainOuterWidth,
@@ -84,8 +79,6 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// applyLayout resizes the viewport to fit the current terminal size
-// and re-renders its content so long lines wrap/scroll correctly.
 func (m *Model) applyLayout() {
 	if !m.ready {
 		return
@@ -157,8 +150,6 @@ func (m Model) mainTitle() string {
 	return item.driver.Name()
 }
 
-// renderMainContent builds the (unbounded-height) content shown in
-// the main panel's viewport for the current selection/load state.
 func (m Model) renderMainContent() string {
 	item, ok := m.activeItem()
 	if !ok {
@@ -186,16 +177,13 @@ func (m Model) renderMainContent() string {
 	}
 }
 
-// cacheRowLines renders one cache entry's line(s), wrapped to fit
-// contentWidth. Shared by renderEntries and packageCursorLineOffset so
-// the two stay in lockstep.
+// cacheRowLines is shared by renderEntries and packageCursorLineOffset
+// so the two stay in lockstep.
 func cacheRowLines(e driver.Entry, contentWidth int) []string {
 	prefix := fmt.Sprintf("  %-40s %10s  ", e.Name, formatBytes(e.Size))
 	return textwrap.ContentLine(prefix+e.Path, contentWidth, lipgloss.Width(prefix))
 }
 
-// cacheSectionLineCount is the number of lines the caches section
-// occupies, before the blank line and scope tabs that follow it.
 func cacheSectionLineCount(cache []driver.Entry, contentWidth int) int {
 	lines := 1 // "Caches (N)" title
 	if len(cache) == 0 {
@@ -207,10 +195,8 @@ func cacheSectionLineCount(cache []driver.Entry, contentWidth int) int {
 	return lines
 }
 
-// packageRowLines renders one package entry's line(s), wrapped to fit
-// contentWidth, prefixed with a cursor marker when selected. Shared by
-// renderEntries and packageCursorLineOffset so the two stay in
-// lockstep.
+// packageRowLines is shared by renderEntries and packageCursorLineOffset
+// so the two stay in lockstep.
 func packageRowLines(e driver.Entry, contentWidth int, selected bool) []string {
 	marker := "  "
 	if selected {
@@ -220,9 +206,6 @@ func packageRowLines(e driver.Entry, contentWidth int, selected bool) []string {
 	return textwrap.ContentLine(line, contentWidth, 4)
 }
 
-// packageCursorLineOffset reports the line (within renderEntries'
-// output) where the currently selected package row starts, so the
-// viewport can be scrolled to keep it visible.
 func (m Model) packageCursorLineOffset(contentWidth int) int {
 	lines := cacheSectionLineCount(m.cache, contentWidth)
 	lines += 2 // blank line + scope tabs line
@@ -287,8 +270,6 @@ func (m Model) renderEntries() string {
 	return b.String()
 }
 
-// renderScopeTabs renders the Global/Local package tab selector,
-// highlighting whichever one m.scope currently has selected.
 func (m Model) renderScopeTabs() string {
 	global := fmt.Sprintf("Global packages (%d)", len(m.globalPackages))
 	local := fmt.Sprintf("Local packages (%d)", len(m.localPackages))
@@ -303,8 +284,6 @@ func (m Model) renderScopeTabs() string {
 	return global + "   " + local
 }
 
-// renderConfirmModal renders the "uninstall this package?" prompt
-// shown in place of the body while m.confirmRemove is set.
 func (m Model) renderConfirmModal() string {
 	e := m.pendingRemove
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorError).Render("Uninstall package?")

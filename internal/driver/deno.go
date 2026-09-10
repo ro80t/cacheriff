@@ -18,15 +18,14 @@ type denoDriver struct {
 	base
 }
 
-// NewDenoDriver returns the Driver for Deno.
 func NewDenoDriver() Driver {
+	// localDir is left unset: see LocalPackages for why.
 	return denoDriver{base: base{
 		id:          "deno",
 		name:        "Deno",
 		binary:      "deno",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
 		dirs:        []string{"node_modules"},
-		// localDir is left unset: see LocalPackages for why.
 	}}
 }
 
@@ -68,10 +67,6 @@ func (d denoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	return denoCacheEntriesFromInfo(ctx, info), nil
 }
 
-// denoCacheEntriesFromInfo sizes DENO_DIR's subdirectories
-// concurrently: a long-lived DENO_DIR (especially the remote module
-// cache) can accumulate a lot of files, so walking them one after
-// another would be slow.
 func denoCacheEntriesFromInfo(ctx context.Context, info denoInfo) []Entry {
 	return sizeCacheDirs(ctx, []namedDir{
 		{"Remote module cache", info.ModulesCache},
@@ -112,12 +107,10 @@ func (d denoDriver) GlobalInstallDir(_ context.Context) (string, error) {
 // The specifier is always the last quoted argument before "$@"/%*.
 var denoShimSpecRe = regexp.MustCompile(`"([^"]+)"\s+(?:"\$@"|%\*)\s*$`)
 
-// GlobalPackages reports the CLI tools installed via `deno install
-// -g`, best-effort: deno has no single command that lists them with
-// resolved versions, so this scans the bin directory's generated shim
-// scripts and pulls out the specifier (e.g. "npm:cowsay" or
-// "jsr:@std/foo@1.2.3") each one runs, reporting that as the Version
-// since it's the most useful thing deno itself records about it.
+// GlobalPackages is best-effort: deno has no command that lists
+// installed CLI tools with resolved versions, so this scans the bin
+// directory's generated shim scripts and reports each one's target
+// specifier (e.g. "npm:cowsay") as the Version.
 func (d denoDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	binDir, err := d.GlobalInstallDir(ctx)
 	if err != nil {
@@ -179,15 +172,8 @@ func readDenoShims(binDir string) ([]Entry, error) {
 }
 
 // LocalPackages always reports nothing: unlike npm/yarn/pnpm/bun,
-// Deno resolves dependencies (whether from JSR, npm, or URLs) into
-// its single shared, machine-wide DENO_DIR cache (already covered by
-// CacheEntries) rather than copying them into the project, much like
-// cargo's shared registry - so localDir is left unset in
-// NewDenoDriver, giving the base LocalInstallDir its ("", false)
-// default. A project's deno.json can declare an "imports" map, but
-// those are version ranges resolved into the shared DENO_DIR cache,
-// not a distinct per-project artifact this driver could report a
-// path or size for.
+// Deno resolves dependencies into the shared DENO_DIR cache (already
+// covered by CacheEntries) rather than copying them into the project.
 func (denoDriver) LocalPackages(_ context.Context, _ string) ([]Entry, error) {
 	return nil, nil
 }

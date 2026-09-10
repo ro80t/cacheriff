@@ -14,7 +14,6 @@ type pnpmDriver struct {
 	base
 }
 
-// NewPnpmDriver returns the Driver for pnpm.
 func NewPnpmDriver() Driver {
 	return pnpmDriver{base: base{
 		id:          "pnpm",
@@ -42,9 +41,8 @@ func (d pnpmDriver) GlobalInstallDir(ctx context.Context) (string, error) {
 	return d.runOutput(ctx, "root", "-g")
 }
 
-// pnpmListRoot is the shape of one element of `pnpm list [-g]
-// --depth=0 --json`'s array output: a project (or, for -g, the
-// single global "project") together with its direct dependencies.
+// pnpmListRoot is one element of `pnpm list [-g] --depth=0 --json`'s
+// array output.
 type pnpmListRoot struct {
 	Dependencies map[string]struct {
 		Version string `json:"version"`

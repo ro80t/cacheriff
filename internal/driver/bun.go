@@ -18,7 +18,6 @@ type bunDriver struct {
 	base
 }
 
-// NewBunDriver returns the Driver for Bun.
 func NewBunDriver() Driver {
 	return bunDriver{base: base{
 		id:          "bun",
@@ -57,18 +56,14 @@ func (d bunDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	return d.singleDirCacheEntries(ctx, dir, "Bun install cache")
 }
 
-// bunGlobalListHeaderRe matches the first line of `bun pm ls -g`'s
-// output, which reports the resolved global install root, e.g.
-// "C:\Users\me node_modules (12)" or, with nothing installed,
-// "C:\Users\me node_modules" with no count. This is read from the
-// command's own output rather than assumed to be
-// "$BUN_INSTALL/install/global", since a bunfig.toml can redirect it
-// elsewhere.
+// bunGlobalListHeaderRe matches `bun pm ls -g`'s first line, which
+// reports the resolved global install root, e.g. "C:\Users\me
+// node_modules (12)". Read from output rather than assumed to be
+// "$BUN_INSTALL/install/global" since bunfig.toml can redirect it.
 var bunGlobalListHeaderRe = regexp.MustCompile(`^(.+) node_modules(?: \(\d+\))?$`)
 
-// bunGlobalListEntryRe matches a top-level package line in `bun pm ls
-// -g`'s tree output, e.g. "├── left-pad@1.3.0" or "└── left-pad@1.3.0".
-// Nested (transitive) lines are indented further and don't match.
+// bunGlobalListEntryRe matches a top-level package line, e.g.
+// "├── left-pad@1.3.0"; indented (transitive) lines don't match.
 var bunGlobalListEntryRe = regexp.MustCompile(`^(?:├──|└──) (.+)$`)
 
 func (d bunDriver) GlobalInstallDir(ctx context.Context) (string, error) {
@@ -101,11 +96,6 @@ func (d bunDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	return entries, nil
 }
 
-// bunGlobalList runs `bun pm ls -g`, which (unlike most bun pm
-// subcommands) prints the tree of directly-installed global packages
-// by default without needing a --depth flag, and returns the
-// resolved global node_modules root together with each
-// "name@version" entry.
 func bunGlobalList(ctx context.Context) (string, []string, error) {
 	out, err := exec.CommandContext(ctx, "bun", "pm", "ls", "-g").Output()
 	if err != nil {

@@ -2,7 +2,6 @@ package ui
 
 import "github.com/charmbracelet/bubbles/key"
 
-// keyMap defines the key bindings used across the app.
 type keyMap struct {
 	Up     key.Binding
 	Down   key.Binding

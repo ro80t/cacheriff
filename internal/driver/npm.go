@@ -16,7 +16,6 @@ type npmDriver struct {
 	base
 }
 
-// NewNPMDriver returns the Driver for npm (Node.js packages).
 func NewNPMDriver() Driver {
 	return npmDriver{base: base{
 		id:          "npm",
@@ -58,10 +57,8 @@ func (d npmDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 		return nil, err
 	}
 
-	// `npm ls -g` exits non-zero whenever the dependency tree has any
-	// problem (e.g. one extraneous/invalid package) even though it
-	// still prints valid JSON, so only bail out if the output can't
-	// be parsed at all.
+	// `npm ls -g` exits non-zero on any dependency tree problem even
+	// though it still prints valid JSON, so only bail if unparsable.
 	out, _ := exec.CommandContext(ctx, "npm", "ls", "-g", "--depth=0", "--json").Output()
 	var parsed npmListOutput
 	if err := json.Unmarshal(out, &parsed); err != nil {
@@ -76,7 +73,7 @@ func (d npmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, err
 		return nil, nil
 	}
 
-	// Same non-zero-exit caveat as GlobalPackages above applies here.
+	// Same non-zero-exit caveat as GlobalPackages.
 	cmd := exec.CommandContext(ctx, "npm", "ls", "--depth=0", "--json")
 	cmd.Dir = root
 	out, _ := cmd.Output()
@@ -87,14 +84,10 @@ func (d npmDriver) LocalPackages(ctx context.Context, root string) ([]Entry, err
 	return npmEntriesFromList(ctx, dir, parsed, KindLocalPackage), nil
 }
 
-// npmEntriesFromList turns a parsed `npm ls [-g] --json` result into
-// Entries, resolving each package's on-disk path under baseDir (a
-// node_modules directory, local or global).
 func npmEntriesFromList(ctx context.Context, baseDir string, parsed npmListOutput, kind EntryKind) []Entry {
 	entries := make([]Entry, 0, len(parsed.Dependencies))
 	for name, meta := range parsed.Dependencies {
-		// Scoped package names ("@scope/name") map to a nested
-		// "@scope/name" directory under baseDir.
+		// Scoped names ("@scope/name") map to a nested directory.
 		parts := append([]string{baseDir}, strings.Split(name, "/")...)
 		p := filepath.Join(parts...)
 

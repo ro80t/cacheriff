@@ -15,12 +15,10 @@ import (
 	"cacheriff/internal/theme"
 )
 
-// Config is the root of cacheriff's config file.
 type Config struct {
 	Gui GuiConfig `yaml:"gui"`
 }
 
-// GuiConfig holds display-related settings.
 type GuiConfig struct {
 	Theme theme.Override `yaml:"theme"`
 }

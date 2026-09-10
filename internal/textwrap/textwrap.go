@@ -9,21 +9,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ContentLine hard-wraps line into one or more chunks so that none of
-// them exceeds width columns, indenting every chunk after the first
-// by indent spaces so a long value (a full file path, a long module
-// name) reads as a natural continuation rather than being cut off.
-// Each break prefers landing right after a path separator ('/' or
-// '\') over an arbitrary column, so a wrapped path still reads as
-// whole segments rather than being sliced mid-word.
+// ContentLine hard-wraps line into chunks no wider than width,
+// indenting every chunk after the first by indent spaces. Each break
+// prefers landing right after a path separator ('/' or '\') so a
+// wrapped path still reads as whole segments.
 //
-// Callers that hand wrapped text to a fixed-size box (e.g. a
-// lipgloss.Style with Border/Padding and an explicit Width/Height)
-// should wrap it down to that box's real usable width themselves
-// before rendering: lipgloss's own Height() doesn't clip content
-// taller than it, so a too-wide line left for lipgloss to wrap on its
-// own would grow the box past its declared height and misalign it
-// against neighboring boxes.
+// Callers rendering into a fixed-size lipgloss box must wrap to its
+// real usable width themselves: lipgloss's Height() doesn't clip
+// overflow, so an unwrapped line would grow the box past its
+// declared height.
 func ContentLine(line string, width, indent int) []string {
 	if width <= 0 || lipgloss.Width(line) <= width {
 		return []string{line}
@@ -58,10 +52,7 @@ func ContentLine(line string, width, indent int) []string {
 }
 
 // lastPathSeparator returns the index just after the last '/' or '\'
-// in s, so a wrap can break there instead of mid-segment. It returns
-// 0 (meaning "no good break point") when s has no separator, or when
-// the only one found sits right at the start (which would produce a
-// degenerate near-empty chunk).
+// in s, or 0 if there's no good break point.
 func lastPathSeparator(s []rune) int {
 	for i := len(s) - 1; i > 0; i-- {
 		if s[i] == '/' || s[i] == '\\' {

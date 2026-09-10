@@ -6,25 +6,16 @@ import (
 )
 
 // EscapeArg validates that s is safe to pass as a single argv element
-// to an external command (a package manager's own uninstall command,
-// e.g. `npm uninstall -g <name>`), and returns it unchanged if so.
-//
-// Every command a driver's Remove method runs goes through
-// exec.CommandContext(ctx, binary, args...), which hands each element
-// of args to the OS as a discrete argv entry rather than interpolating
-// it into a shell string. That means classic shell-metacharacter
-// injection (";", "|", "`", "$()", ...) cannot happen here regardless
-// of s's contents - there is no shell in the loop to interpret them.
-//
-// The risk EscapeArg actually guards against is argument injection: a
-// value that begins with "-" can be misread by the target command as
-// a flag instead of a plain name (e.g. a package literally named
-// "--force" turning `npm uninstall -g --force` into something other
-// than what it looks like), and control characters/NUL bytes have no
-// legitimate place in a package name either. EscapeArg rejects such
-// values outright rather than rewriting them: silently stripping or
-// quoting characters out of a package name would just make it stop
-// matching anything real, which is worse than failing loudly.
+// to an external command, returning it unchanged if so. Every args
+// element passed through exec.CommandContext reaches the OS directly
+// rather than through a shell, so classic shell-metacharacter
+// injection can't happen here regardless of s's contents. What
+// EscapeArg guards against is argument injection: a value starting
+// with "-" could be misread as a flag (e.g. a package named
+// "--force"), and control characters have no legitimate place in a
+// name either. It rejects such values rather than rewriting them,
+// since silently stripping characters would just make s stop
+// matching anything real.
 func EscapeArg(s string) (string, error) {
 	if s == "" {
 		return "", fmt.Errorf("argument is empty")

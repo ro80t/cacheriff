@@ -6,7 +6,6 @@ package platform
 
 import "runtime"
 
-// OS identifies a broad operating system family.
 type OS int
 
 const (
@@ -29,7 +28,6 @@ func (o OS) String() string {
 	}
 }
 
-// Current returns the OS cacheriff is currently running on.
 func Current() OS {
 	switch runtime.GOOS {
 	case "windows":

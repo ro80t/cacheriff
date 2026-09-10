@@ -18,17 +18,14 @@ type goDriver struct {
 	base
 }
 
-// NewGoDriver returns the Driver for the Go toolchain.
 func NewGoDriver() Driver {
+	// localDir is left unset: Go has no per-project install
+	// directory; dependencies live in the shared GOMODCACHE.
 	return goDriver{base: base{
 		id:          "go",
 		name:        "Go",
 		binary:      "go",
 		supportedOS: []platform.OS{platform.Windows, platform.MacOS, platform.Linux},
-		// localDir is left unset: Go has no per-project package install
-		// directory. Resolved dependencies are downloaded once into the
-		// shared GOMODCACHE and referenced from there directly (like
-		// cargo's shared registry), never copied into the project.
 	}}
 }
 
@@ -43,9 +40,6 @@ const (
 	goModCacheName   = "Module cache (GOMODCACHE)"
 )
 
-// CacheEntries sizes GOCACHE and GOMODCACHE concurrently: GOMODCACHE
-// in particular can hold a huge number of small files across many
-// modules, so walking them one after another would be slow.
 func (d goDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	buildCache, err := d.runOutput(ctx, "env", "GOCACHE")
 	if err != nil {
@@ -73,12 +67,9 @@ func (d goDriver) GlobalInstallDir(ctx context.Context) (string, error) {
 	return filepath.Join(gopath, "bin"), nil
 }
 
-// GlobalPackages reports the binaries `go install`ed into GOBIN (or
-// GOPATH/bin): go has no single command that lists them, so this
-// scans that directory and runs `go version -m` across every file
-// there, which reads each binary's embedded build info (module path,
-// resolved version) directly - no guessing needed, since the Go
-// toolchain stamps this into every module-aware binary it builds.
+// GlobalPackages scans GOBIN (or GOPATH/bin) and runs `go version -m`
+// across every file there, since go has no command that lists
+// installed binaries directly.
 func (d goDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	binDir, err := d.GlobalInstallDir(ctx)
 	if err != nil {
@@ -102,11 +93,7 @@ func (d goDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 		return nil, nil
 	}
 
-	// `go version -m` exits non-zero if any one of the given files
-	// isn't a Go binary it can read build info from (e.g. stray
-	// non-Go junk in the bin dir), but it still prints results for
-	// every file that did work, so - like npm ls -g - only the
-	// output matters here, not the exit status.
+	// Same non-zero-exit-but-valid-output caveat as npm ls -g.
 	args := append([]string{"version", "-m"}, paths...)
 	out, _ := exec.CommandContext(ctx, "go", args...).Output()
 	return parseGoVersionM(out), nil
@@ -175,9 +162,6 @@ type goModRequire struct {
 	Indirect bool
 }
 
-// LocalPackages reports root's direct (non-indirect) module
-// requirements, resolved to their extracted location under
-// GOMODCACHE.
 func (d goDriver) LocalPackages(ctx context.Context, root string) ([]Entry, error) {
 	if !pathExists(filepath.Join(root, "go.mod")) {
 		return nil, nil
@@ -224,11 +208,9 @@ func (d goDriver) LocalPackages(ctx context.Context, root string) ([]Entry, erro
 }
 
 // escapeModulePath implements Go's module cache "escaped path"
-// encoding (see golang.org/x/mod/module.EscapePath): every uppercase
-// letter is replaced with "!" followed by its lowercase form, since
-// GOMODCACHE must work on case-insensitive filesystems too. The same
-// encoding applies to a module cache entry's version component (e.g.
-// ".../github.com/!burnt!sushi/toml@v1.5.0").
+// encoding (golang.org/x/mod/module.EscapePath): each uppercase
+// letter becomes "!" + its lowercase form, e.g.
+// ".../github.com/!burnt!sushi/toml@v1.5.0".
 func escapeModulePath(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

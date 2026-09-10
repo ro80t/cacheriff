@@ -18,10 +18,8 @@ type yarnDriver struct {
 	base
 }
 
-// NewYarnDriver returns the Driver for Yarn Classic (v1). Yarn
-// Berry (v2+) uses a different cache layout and dropped the concept
-// of global installs in favor of `yarn dlx`, so this driver targets
-// the still-widely-used v1 line.
+// NewYarnDriver targets Yarn Classic (v1); Yarn Berry (v2+) uses a
+// different cache layout and dropped global installs for `yarn dlx`.
 func NewYarnDriver() Driver {
 	return yarnDriver{base: base{
 		id:          "yarn",
@@ -57,10 +55,8 @@ func (d yarnDriver) GlobalInstallDir(ctx context.Context) (string, error) {
 	return filepath.Join(dir, "node_modules"), nil
 }
 
-// GlobalPackages reads the global package.json's declared
-// dependencies directly rather than shelling out to `yarn global list
-// --json`: as of Yarn Classic 1.22, that command's JSON output only
-// carries progress events, never the actual package list.
+// GlobalPackages reads the global package.json directly: `yarn global
+// list --json` (as of 1.22) only emits progress events, never the list.
 func (d yarnDriver) GlobalPackages(ctx context.Context) ([]Entry, error) {
 	globalDir, err := d.yarnGlobalDir(ctx)
 	if err != nil {
@@ -141,9 +137,8 @@ func (d yarnDriver) LocalPackages(ctx context.Context, root string) ([]Entry, er
 	return entries, nil
 }
 
-// yarnListTreeLine is the one line, out of `yarn list --json`'s
-// newline-delimited output, that actually carries the dependency
-// tree; the rest are progress/warning events this driver ignores.
+// yarnListTreeLine is the "tree" line of `yarn list --json`'s NDJSON
+// output; other lines are progress/warning events, ignored.
 type yarnListTreeLine struct {
 	Type string `json:"type"`
 	Data struct {
@@ -153,8 +148,6 @@ type yarnListTreeLine struct {
 	} `json:"data"`
 }
 
-// parseYarnListTree scans the NDJSON output of `yarn list --json`
-// for its "tree" line and returns each entry's "name@version" spec.
 func parseYarnListTree(out []byte) ([]string, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
