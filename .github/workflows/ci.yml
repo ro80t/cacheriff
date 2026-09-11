@@ -5,6 +5,8 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -40,3 +42,65 @@ jobs:
 
       - name: Test
         run: go test ./... -race -cover
+
+  assets:
+    name: Upload Assets (${{ matrix.goos }}/${{ matrix.goarch }})
+    if: github.event_name == 'release'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          bin="cacheriff-${{ matrix.goos }}-${{ matrix.goarch }}"
+          [ "${{ matrix.goos }}" = windows ] && bin="$bin.exe"
+          go build -o "$bin" .
+          echo "BIN=$bin" >> "$GITHUB_ENV"
+
+      - name: Compress
+        run: |
+          if [ "${{ matrix.goos }}" = windows ]; then
+            asset="${BIN%.exe}.zip"
+            zip "$asset" "$BIN"
+          else
+            asset="$BIN.tar.gz"
+            tar czf "$asset" "$BIN"
+          fi
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
+
+      - name: Upload
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET }}
