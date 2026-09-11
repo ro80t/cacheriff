@@ -84,6 +84,7 @@ func All() []Driver {
 		NewYarnDriver(),
 		NewBunDriver(),
 		NewDenoDriver(),
+		NewNixDriver(),
 	}
 }
 
