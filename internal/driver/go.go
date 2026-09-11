@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cacheriff/internal/platform"
+	"github.com/ro80t/cacheriff/internal/platform"
 )
 
 type goDriver struct {

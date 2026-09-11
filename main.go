@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"cacheriff/internal/config"
-	"cacheriff/internal/ui"
+	"github.com/ro80t/cacheriff/internal/config"
+	"github.com/ro80t/cacheriff/internal/ui"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 package ui
 
-import "cacheriff/internal/driver"
+import "github.com/ro80t/cacheriff/internal/driver"
 
 // gen guards against a stale load finishing after the user has
 // already selected a different driver.

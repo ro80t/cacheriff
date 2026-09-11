@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"cacheriff/internal/platform"
+	"github.com/ro80t/cacheriff/internal/platform"
 )
 
 type base struct {

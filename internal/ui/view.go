@@ -6,9 +6,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"cacheriff/internal/driver"
-	"cacheriff/internal/platform"
-	"cacheriff/internal/textwrap"
+	"github.com/ro80t/cacheriff/internal/driver"
+	"github.com/ro80t/cacheriff/internal/platform"
+	"github.com/ro80t/cacheriff/internal/textwrap"
 )
 
 // panelLayout holds the pixel budget computed for the current

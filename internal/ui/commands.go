@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"cacheriff/internal/driver"
+	"github.com/ro80t/cacheriff/internal/driver"
 )
 
 // loadDriverDataCmd runs the three independent fetches concurrently,

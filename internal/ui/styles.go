@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"cacheriff/internal/theme"
+	"github.com/ro80t/cacheriff/internal/theme"
 )
 
 var (

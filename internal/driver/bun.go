@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"cacheriff/internal/platform"
-	"cacheriff/internal/textwrap"
+	"github.com/ro80t/cacheriff/internal/platform"
+	"github.com/ro80t/cacheriff/internal/textwrap"
 )
 
 type bunDriver struct {

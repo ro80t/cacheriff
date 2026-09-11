@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"cacheriff/internal/driver"
+	"github.com/ro80t/cacheriff/internal/driver"
 )
 
 // focusedPanel identifies which panel currently receives navigation keys.

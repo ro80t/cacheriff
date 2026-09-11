@@ -7,7 +7,7 @@ package driver
 import (
 	"context"
 
-	"cacheriff/internal/platform"
+	"github.com/ro80t/cacheriff/internal/platform"
 )
 
 // EntryKind distinguishes the different things a driver can report.

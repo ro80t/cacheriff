@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"cacheriff/internal/platform"
-	"cacheriff/internal/textwrap"
+	"github.com/ro80t/cacheriff/internal/platform"
+	"github.com/ro80t/cacheriff/internal/textwrap"
 )
 
 type cargoDriver struct {

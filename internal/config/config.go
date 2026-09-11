@@ -12,7 +12,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 
-	"cacheriff/internal/theme"
+	"github.com/ro80t/cacheriff/internal/theme"
 )
 
 type Config struct {

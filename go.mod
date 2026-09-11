@@ -1,4 +1,4 @@
-module cacheriff
+module github.com/ro80t/cacheriff
 
 go 1.25.13
 
