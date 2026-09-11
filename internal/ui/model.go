@@ -298,6 +298,15 @@ func (m Model) movePackageCursor(delta int) Model {
 }
 
 func (m *Model) ensureCursorVisible() {
+	// At the first entry, scroll all the way to the top rather than
+	// just to that entry's own line, so the Paths section above it
+	// (and anything else above the list) comes back into view instead
+	// of staying permanently scrolled past.
+	if m.packageCursor == 0 {
+		m.viewport.SetYOffset(0)
+		return
+	}
+
 	contentWidth := m.computeLayout().mainContentWidth
 	line := m.packageCursorLineOffset(contentWidth)
 	if line < m.viewport.YOffset {
