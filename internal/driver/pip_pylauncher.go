@@ -2,7 +2,6 @@ package driver
 
 import (
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -34,10 +33,13 @@ func parsePyLauncherOutput(out string) []string {
 		}
 		fields := pyLauncherFieldsRe.Split(line, -1)
 		pythonExe := fields[len(fields)-1]
-		if pythonExe == "" {
+		// Always a Windows path regardless of host OS, so split on a
+		// literal backslash rather than path/filepath.
+		idx := strings.LastIndexByte(pythonExe, '\\')
+		if idx < 0 {
 			continue
 		}
-		dirs = append(dirs, filepath.Join(filepath.Dir(pythonExe), "Scripts"))
+		dirs = append(dirs, pythonExe[:idx]+`\Scripts`)
 	}
 	return dirs
 }
