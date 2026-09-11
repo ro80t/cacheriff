@@ -185,7 +185,7 @@ func cacheRowLines(e driver.Entry, contentWidth int) []string {
 }
 
 func cacheSectionLineCount(cache []driver.Entry, contentWidth int) int {
-	lines := 1 // "Caches (N)" title
+	lines := 1 // "Paths (N)" title
 	if len(cache) == 0 {
 		lines++
 	}
@@ -228,7 +228,7 @@ func (m Model) renderEntries() string {
 
 	var b strings.Builder
 
-	b.WriteString(sectionTitleStyle.Render(fmt.Sprintf("Caches (%d)", len(m.cache))))
+	b.WriteString(sectionTitleStyle.Render(fmt.Sprintf("Paths (%d)", len(m.cache))))
 	b.WriteString("\n")
 	if len(m.cache) == 0 {
 		b.WriteString(unavailableItemStyle.Render("  none found"))
