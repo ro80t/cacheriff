@@ -103,6 +103,11 @@ context but shouldn't be re-added as comments unless something changes.
   uppercase letter with `!` + its lowercase form, matching
   `golang.org/x/mod/module.EscapePath`, since GOMODCACHE must work on
   case-insensitive filesystems too.
+- rustup toolchains aren't listed via `rustup toolchain list` —
+  `cargoToolchainEntries` reads `RUSTUP_HOME/toolchains` directly, since
+  the directory can exist (and be worth reporting) even when rustup
+  itself isn't on PATH. Removal still shells out to `rustup toolchain
+  uninstall`, since `cargo` has no equivalent subcommand.
 
 ### Security
 

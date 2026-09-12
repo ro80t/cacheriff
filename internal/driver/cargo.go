@@ -85,8 +85,9 @@ func rustupHome() (string, error) {
 	return filepath.Join(home, ".rustup"), nil
 }
 
-// Reads the toolchains dir directly rather than `rustup toolchain
-// list`, since it can exist even when rustup isn't on PATH.
+// cargoToolchainEntries reads RUSTUP_HOME/toolchains directly rather
+// than shelling out to `rustup toolchain list`, since the toolchains
+// can exist even when rustup isn't on PATH.
 func cargoToolchainEntries(ctx context.Context) []Entry {
 	home, err := rustupHome()
 	if err != nil {
@@ -306,6 +307,8 @@ func (d cargoDriver) Remove(ctx context.Context, e Entry) error {
 		}
 		return d.runCombined(ctx, "uninstall", name)
 	case KindToolchain:
+		// rustup, not cargo, manages toolchains; there's no cargo
+		// subcommand for this.
 		name, err := textwrap.EscapeArg(e.Name)
 		if err != nil {
 			return fmt.Errorf("cargo: %w", err)
