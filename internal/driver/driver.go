@@ -86,6 +86,10 @@ func All() []Driver {
 		NewDenoDriver(),
 		NewPipDriver(),
 		NewNixDriver(),
+		NewGemDriver(),
+		NewComposerDriver(),
+		NewMavenDriver(),
+		NewDotnetDriver(),
 	}
 }
 
