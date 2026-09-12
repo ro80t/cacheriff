@@ -17,6 +17,7 @@ const (
 	KindCache EntryKind = iota
 	KindGlobalPackage
 	KindLocalPackage
+	KindToolchain
 )
 
 func (k EntryKind) String() string {
@@ -27,6 +28,8 @@ func (k EntryKind) String() string {
 		return "global package"
 	case KindLocalPackage:
 		return "local package"
+	case KindToolchain:
+		return "toolchain"
 	default:
 		return "unknown"
 	}

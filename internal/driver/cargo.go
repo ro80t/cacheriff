@@ -69,7 +69,47 @@ func (d cargoDriver) CacheEntries(ctx context.Context) ([]Entry, error) {
 	for i, c := range cargoCacheDirs {
 		dirs[i] = namedDir{name: c.name, path: filepath.Join(home, c.rel)}
 	}
-	return sizeCacheDirs(ctx, dirs), nil
+	entries := sizeCacheDirs(ctx, dirs)
+	entries = append(entries, cargoToolchainEntries(ctx)...)
+	return entries, nil
+}
+
+func rustupHome() (string, error) {
+	if v := os.Getenv("RUSTUP_HOME"); v != "" {
+		return v, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cargo: resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".rustup"), nil
+}
+
+// Reads the toolchains dir directly rather than `rustup toolchain
+// list`, since it can exist even when rustup isn't on PATH.
+func cargoToolchainEntries(ctx context.Context) []Entry {
+	home, err := rustupHome()
+	if err != nil {
+		return nil
+	}
+	toolchainsDir := filepath.Join(home, "toolchains")
+	items, err := os.ReadDir(toolchainsDir)
+	if err != nil {
+		return nil
+	}
+
+	dirs := make([]namedDir, 0, len(items))
+	for _, item := range items {
+		if item.IsDir() {
+			dirs = append(dirs, namedDir{name: item.Name(), path: filepath.Join(toolchainsDir, item.Name())})
+		}
+	}
+
+	entries := sizeCacheDirs(ctx, dirs)
+	for i := range entries {
+		entries[i].Kind = KindToolchain
+	}
+	return entries
 }
 
 func (d cargoDriver) GlobalInstallDir(_ context.Context) (string, error) {
@@ -265,6 +305,16 @@ func (d cargoDriver) Remove(ctx context.Context, e Entry) error {
 			return fmt.Errorf("cargo: %w", err)
 		}
 		return d.runCombined(ctx, "uninstall", name)
+	case KindToolchain:
+		name, err := textwrap.EscapeArg(e.Name)
+		if err != nil {
+			return fmt.Errorf("cargo: %w", err)
+		}
+		out, err := exec.CommandContext(ctx, "rustup", "toolchain", "uninstall", name).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("rustup toolchain uninstall %s: %w: %s", name, err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	default:
 		return d.unsupportedKindErr(e.Kind)
 	}

@@ -120,6 +120,39 @@ func TestParseCargoInstallListExeFallback(t *testing.T) {
 	}
 }
 
+func TestCargoToolchainEntries(t *testing.T) {
+	rustupHomeDir := t.TempDir()
+	t.Setenv("RUSTUP_HOME", rustupHomeDir)
+
+	toolchainsDir := filepath.Join(rustupHomeDir, "toolchains", "stable-x86_64-pc-windows-msvc")
+	if err := os.MkdirAll(toolchainsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(toolchainsDir, "bin"), []byte("fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries := cargoToolchainEntries(context.Background())
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1: %+v", len(entries), entries)
+	}
+	if entries[0].Name != "stable-x86_64-pc-windows-msvc" {
+		t.Errorf("got Name=%q, want stable-x86_64-pc-windows-msvc", entries[0].Name)
+	}
+	if entries[0].Kind != KindToolchain {
+		t.Errorf("got Kind=%v, want KindToolchain", entries[0].Kind)
+	}
+}
+
+func TestCargoToolchainEntriesNoRustup(t *testing.T) {
+	t.Setenv("RUSTUP_HOME", filepath.Join(t.TempDir(), "does-not-exist"))
+
+	entries := cargoToolchainEntries(context.Background())
+	if entries != nil {
+		t.Errorf("got %+v, want nil", entries)
+	}
+}
+
 func TestCargoLocalInstallDir(t *testing.T) {
 	d := cargoDriver{}
 	if dir, ok := d.LocalInstallDir("/some/project"); ok || dir != "" {
