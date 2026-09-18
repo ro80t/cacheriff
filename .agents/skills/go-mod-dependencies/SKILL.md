@@ -5,16 +5,17 @@ description: Managing Go module dependencies in cacheriff (go.mod/go.sum). Use w
 
 # Go module dependencies
 
-cacheriff's module is intentionally small: `go.mod` currently has four
+cacheriff's module is intentionally small: `go.mod` currently has five
 direct dependencies —
 [`bubbles`](https://github.com/charmbracelet/bubbles),
 [`bubbletea`](https://github.com/charmbracelet/bubbletea),
 [`lipgloss`](https://github.com/charmbracelet/lipgloss) (the Charm TUI
 stack, see `.agents/skills/bubbletea-tui` and
-`.agents/skills/lipgloss-styling`), and
+`.agents/skills/lipgloss-styling`),
 [`goccy/go-yaml`](https://github.com/goccy/go-yaml) (config file parsing,
-`internal/config`). Everything else in `go.mod` is `// indirect` —
-transitive dependencies of those four.
+`internal/config`), and [`spf13/cobra`](https://github.com/spf13/cobra)
+(the `main.go` CLI entrypoint, see `.agents/skills/cobra-cli`). Everything
+else in `go.mod` is `// indirect` — transitive dependencies of those five.
 
 ## Adding a dependency
 
