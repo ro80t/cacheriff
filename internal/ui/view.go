@@ -165,7 +165,10 @@ func (m Model) renderMainContent() string {
 
 	switch {
 	case m.removing:
-		return fmt.Sprintf("%s Uninstalling %s...", m.spinner.View(), m.pendingRemove.Name)
+		if len(m.pendingRemove) == 1 {
+			return fmt.Sprintf("%s Uninstalling %s...", m.spinner.View(), m.pendingRemove[0].Name)
+		}
+		return fmt.Sprintf("%s Uninstalling %d packages...", m.spinner.View(), len(m.pendingRemove))
 	case m.state == loadInProgress:
 		return fmt.Sprintf("%s Scanning caches and packages...", m.spinner.View())
 	case m.state == loadError:
@@ -197,12 +200,16 @@ func cacheSectionLineCount(cache []driver.Entry, contentWidth int) int {
 
 // packageRowLines is shared by renderEntries and packageCursorLineOffset
 // so the two stay in lockstep.
-func packageRowLines(e driver.Entry, contentWidth int, selected bool) []string {
-	marker := "  "
-	if selected {
-		marker = "❯ "
+func packageRowLines(e driver.Entry, contentWidth int, cursor bool, marked bool) []string {
+	pointer := "  "
+	if cursor {
+		pointer = "❯ "
 	}
-	line := fmt.Sprintf("%s%-30s v%-14s %10s", marker, e.Name, e.Version, formatBytes(e.Size))
+	check := " "
+	if marked {
+		check = "✓"
+	}
+	line := fmt.Sprintf("%s[%s] %-30s v%-14s %10s", pointer, check, e.Name, e.Version, formatBytes(e.Size))
 	return textwrap.ContentLine(line, contentWidth, 4)
 }
 
@@ -218,7 +225,7 @@ func (m Model) packageCursorLineOffset(contentWidth int) int {
 		if i == m.packageCursor {
 			return lines
 		}
-		lines += len(packageRowLines(e, contentWidth, false))
+		lines += len(packageRowLines(e, contentWidth, false, false))
 	}
 	return lines
 }
@@ -256,12 +263,13 @@ func (m Model) renderEntries() string {
 		b.WriteString("\n")
 	}
 	for i, e := range entries {
-		selected := m.scope == scopeGlobal && i == m.packageCursor
+		cursor := m.scope == scopeGlobal && i == m.packageCursor
+		marked := m.selected[e]
 		style := lipgloss.NewStyle()
-		if selected {
+		if cursor {
 			style = selectedItemStyle
 		}
-		for _, chunk := range packageRowLines(e, contentWidth, selected) {
+		for _, chunk := range packageRowLines(e, contentWidth, cursor, marked) {
 			b.WriteString(style.Render(chunk))
 			b.WriteString("\n")
 		}
@@ -285,13 +293,24 @@ func (m Model) renderScopeTabs() string {
 }
 
 func (m Model) renderConfirmModal() string {
-	e := m.pendingRemove
-	title := lipgloss.NewStyle().Bold(true).Foreground(colorError).Render("Uninstall package?")
-	detail := fmt.Sprintf("%s v%s", e.Name, e.Version)
+	var title, detail string
+	if len(m.pendingRemove) == 1 {
+		e := m.pendingRemove[0]
+		title = "Uninstall package?"
+		detail = fmt.Sprintf("%s v%s", e.Name, e.Version)
+	} else {
+		title = fmt.Sprintf("Uninstall %d packages?", len(m.pendingRemove))
+		names := make([]string, len(m.pendingRemove))
+		for i, e := range m.pendingRemove {
+			names[i] = e.Name
+		}
+		detail = strings.Join(names, "\n")
+	}
+	titleStyled := lipgloss.NewStyle().Bold(true).Foreground(colorError).Render(title)
 	warning := "This runs the package manager's own uninstall\ncommand and cannot be undone."
 	hint := unavailableItemStyle.Render("[y] confirm    [n / esc] cancel")
 
-	content := lipgloss.JoinVertical(lipgloss.Left, title, "", detail, "", warning, "", hint)
+	content := lipgloss.JoinVertical(lipgloss.Left, titleStyled, "", detail, "", warning, "", hint)
 	return panelStyle.
 		BorderForeground(colorError).
 		Padding(1, 2).

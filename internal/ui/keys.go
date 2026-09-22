@@ -35,11 +35,11 @@ func newKeyMap() keyMap {
 		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
+			key.WithHelp("enter", "select/mark"),
 		),
 		Delete: key.NewBinding(
 			key.WithKeys("d"),
-			key.WithHelp("d", "uninstall"),
+			key.WithHelp("d", "uninstall marked"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("esc"),

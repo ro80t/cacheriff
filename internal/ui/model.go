@@ -73,12 +73,19 @@ type Model struct {
 	loadGen    int
 	loadCancel context.CancelFunc
 
+	// selected holds packages marked for a batch uninstall (Select key,
+	// global scope only); empty means the entry under the cursor is the
+	// target instead.
+	selected map[driver.Entry]bool
+
 	// confirmRemove/pendingRemove drive the uninstall confirmation
-	// modal; removing/removeErr/removeGen track the uninstall command
-	// once confirmed. Only global packages support uninstall today.
+	// modal; removing/removePending/removeErr/removeGen track the
+	// uninstall commands once confirmed. Only global packages support
+	// uninstall today.
 	confirmRemove bool
-	pendingRemove driver.Entry
+	pendingRemove []driver.Entry
 	removing      bool
+	removePending int
 	removeErr     error
 	removeGen     int
 	removeCancel  context.CancelFunc
@@ -169,12 +176,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.removeGen {
 			return m, nil // stale result from a since-abandoned selection
 		}
-		m.removing = false
+		m.removePending--
 		if msg.err != nil {
 			m.removeErr = msg.err
 		} else {
 			m.removeErr = nil
 			m.removeEntryFromList(msg.entry)
+		}
+		if m.removePending <= 0 {
+			m.removing = false
+			m.pendingRemove = nil
 		}
 		m.viewport.SetContent(m.renderMainContent())
 		return m, nil
@@ -246,6 +257,8 @@ func (m Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setScope(scopeGlobal), nil
 	case key.Matches(msg, m.keys.Right):
 		return m.setScope(scopeLocal), nil
+	case key.Matches(msg, m.keys.Select):
+		return m.toggleSelected(), nil
 	case key.Matches(msg, m.keys.Delete):
 		return m.startRemove()
 	case key.Matches(msg, m.keys.Up):
@@ -265,7 +278,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.confirmRemovePackage()
 	case "n", "esc":
 		m.confirmRemove = false
-		m.pendingRemove = driver.Entry{}
+		m.pendingRemove = nil
 		return m, nil
 	case "ctrl+c":
 		if m.loadCancel != nil {
@@ -316,15 +329,47 @@ func (m *Model) ensureCursorVisible() {
 	}
 }
 
+func (m Model) toggleSelected() Model {
+	if m.scope != scopeGlobal {
+		return m
+	}
+	entries := m.currentEntries()
+	if m.packageCursor < 0 || m.packageCursor >= len(entries) {
+		return m
+	}
+	e := entries[m.packageCursor]
+	if m.selected == nil {
+		m.selected = map[driver.Entry]bool{}
+	}
+	if m.selected[e] {
+		delete(m.selected, e)
+	} else {
+		m.selected[e] = true
+	}
+	m.viewport.SetContent(m.renderMainContent())
+	return m
+}
+
 func (m Model) startRemove() (tea.Model, tea.Cmd) {
 	if m.scope != scopeGlobal {
 		return m, nil
 	}
 	entries := m.currentEntries()
-	if m.packageCursor < 0 || m.packageCursor >= len(entries) {
-		return m, nil
+
+	var picked []driver.Entry
+	for _, e := range entries {
+		if m.selected[e] {
+			picked = append(picked, e)
+		}
 	}
-	m.pendingRemove = entries[m.packageCursor]
+	if len(picked) == 0 {
+		if m.packageCursor < 0 || m.packageCursor >= len(entries) {
+			return m, nil
+		}
+		picked = []driver.Entry{entries[m.packageCursor]}
+	}
+
+	m.pendingRemove = picked
 	m.confirmRemove = true
 	m.removeErr = nil
 	return m, nil
@@ -337,11 +382,12 @@ func (m Model) confirmRemovePackage() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	entry := m.pendingRemove
-	m.pendingRemove = driver.Entry{}
+	entries := m.pendingRemove
 	m.removing = true
+	m.removePending = len(entries)
 	m.removeErr = nil
 	m.removeGen++
+	m.selected = nil
 	m.viewport.SetContent(m.renderMainContent())
 
 	if m.removeCancel != nil {
@@ -349,7 +395,13 @@ func (m Model) confirmRemovePackage() (tea.Model, tea.Cmd) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 	m.removeCancel = cancel
-	return m, tea.Batch(m.spinner.Tick, removePackageCmd(ctx, item.driver, entry, m.removeGen))
+
+	cmds := make([]tea.Cmd, 0, len(entries)+1)
+	cmds = append(cmds, m.spinner.Tick)
+	for _, e := range entries {
+		cmds = append(cmds, removePackageCmd(ctx, item.driver, e, m.removeGen))
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) removeEntryFromList(e driver.Entry) {
@@ -385,6 +437,7 @@ func (m Model) selectDriver(idx int) (tea.Model, tea.Cmd) {
 	m.focus = focusMain
 	m.scope = scopeGlobal
 	m.packageCursor = 0
+	m.selected = nil
 	m.confirmRemove = false
 	m.removing = false
 	m.removeErr = nil

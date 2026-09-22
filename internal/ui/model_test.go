@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
+
 	"github.com/ro80t/cacheriff/internal/driver"
 )
 
@@ -47,5 +49,70 @@ func TestEnsureCursorVisibleScrollsToTopAtFirstEntry(t *testing.T) {
 	}
 	if m.viewport.YOffset != 0 {
 		t.Errorf("got YOffset=%d, want 0 (Paths section should be visible again)", m.viewport.YOffset)
+	}
+}
+
+// startRemove should batch every marked package rather than just the one
+// under the cursor, once the user has toggled marks with Select.
+func TestStartRemoveUsesMarkedSelection(t *testing.T) {
+	pkgs := []driver.Entry{
+		{Name: "pkg0", Version: "1.0.0", Kind: driver.KindGlobalPackage},
+		{Name: "pkg1", Version: "1.0.0", Kind: driver.KindGlobalPackage},
+		{Name: "pkg2", Version: "1.0.0", Kind: driver.KindGlobalPackage},
+	}
+
+	m := Model{
+		ready:          true,
+		state:          loadDone,
+		drivers:        []driverItem{{driver: driver.NewNPMDriver(), available: true}},
+		activeIdx:      0,
+		scope:          scopeGlobal,
+		globalPackages: pkgs,
+		viewport:       viewport.New(0, 0),
+	}
+
+	m.packageCursor = 0
+	m = m.toggleSelected()
+	m.packageCursor = 2
+	m = m.toggleSelected()
+
+	mdl, _ := m.startRemove()
+	m = mdl.(Model)
+
+	if !m.confirmRemove {
+		t.Fatalf("expected confirmRemove to be true")
+	}
+	if len(m.pendingRemove) != 2 {
+		t.Fatalf("got %d pending removals, want 2", len(m.pendingRemove))
+	}
+	if m.pendingRemove[0] != pkgs[0] || m.pendingRemove[1] != pkgs[2] {
+		t.Fatalf("got pendingRemove=%v, want [pkg0, pkg2]", m.pendingRemove)
+	}
+}
+
+// With nothing marked, startRemove falls back to the single entry under
+// the cursor, matching the pre-multi-select behavior.
+func TestStartRemoveFallsBackToCursorWhenNothingMarked(t *testing.T) {
+	pkgs := []driver.Entry{
+		{Name: "pkg0", Version: "1.0.0", Kind: driver.KindGlobalPackage},
+		{Name: "pkg1", Version: "1.0.0", Kind: driver.KindGlobalPackage},
+	}
+
+	m := Model{
+		ready:          true,
+		state:          loadDone,
+		drivers:        []driverItem{{driver: driver.NewNPMDriver(), available: true}},
+		activeIdx:      0,
+		scope:          scopeGlobal,
+		globalPackages: pkgs,
+		packageCursor:  1,
+		viewport:       viewport.New(0, 0),
+	}
+
+	mdl, _ := m.startRemove()
+	m = mdl.(Model)
+
+	if len(m.pendingRemove) != 1 || m.pendingRemove[0] != pkgs[1] {
+		t.Fatalf("got pendingRemove=%v, want [pkg1]", m.pendingRemove)
 	}
 }
