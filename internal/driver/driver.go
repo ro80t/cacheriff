@@ -93,6 +93,8 @@ func All() []Driver {
 		NewComposerDriver(),
 		NewMavenDriver(),
 		NewDotnetDriver(),
+		NewGradleDriver(),
+		NewUvDriver(),
 	}
 }
 
